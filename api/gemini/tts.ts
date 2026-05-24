@@ -1,30 +1,34 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
-import { GoogleGenAI, types } from '@google/genai';
+import { GoogleGenAI } from '@google/genai';
 
 function parseAudioMimeType(mimeType: string): { bitsPerSample: number; rate: number } {
   let bitsPerSample = 16;
   let rate = 24000;
-  const parts = mimeType.split(';');
-  for (const param of parts) {
-    const p = param.trim();
-    if (p.toLowerCase().startsWith('rate=')) {
-      const val = parseInt(p.split('=')[1]);
-      if (!isNaN(val)) rate = val;
-    } else if (p.startsWith('audio/L')) {
-      const val = parseInt(p.split('L')[1]);
-      if (!isNaN(val)) bitsPerSample = val;
+
+  for (const rawParam of mimeType.split(';')) {
+    const param = rawParam.trim();
+    if (param.toLowerCase().startsWith('rate=')) {
+      const value = Number.parseInt(param.split('=', 2)[1] ?? '', 10);
+      if (!Number.isNaN(value)) rate = value;
+      continue;
+    }
+
+    if (param.startsWith('audio/L')) {
+      const value = Number.parseInt(param.split('L', 2)[1] ?? '', 10);
+      if (!Number.isNaN(value)) bitsPerSample = value;
     }
   }
+
   return { bitsPerSample, rate };
 }
 
 function convertToWav(audioData: Buffer, mimeType: string): Buffer {
   const { bitsPerSample, rate } = parseAudioMimeType(mimeType);
   const numChannels = 1;
-  const dataSize = audioData.length;
   const bytesPerSample = bitsPerSample / 8;
   const blockAlign = numChannels * bytesPerSample;
   const byteRate = rate * blockAlign;
+  const dataSize = audioData.length;
   const chunkSize = 36 + dataSize;
 
   const header = Buffer.alloc(44);
@@ -33,7 +37,7 @@ function convertToWav(audioData: Buffer, mimeType: string): Buffer {
   header.write('WAVE', 8);
   header.write('fmt ', 12);
   header.writeUInt32LE(16, 16);
-  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(1, 20); // PCM
   header.writeUInt16LE(numChannels, 22);
   header.writeUInt32LE(rate, 24);
   header.writeUInt32LE(byteRate, 28);
@@ -53,41 +57,37 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const { text, voiceName = 'Zephyr' } = req.body;
-
     if (!text) return res.status(400).json({ error: 'Text is required' });
 
     const client = new GoogleGenAI({ apiKey });
+    const contents = text;
 
-    const config = {
-      temperature: 1,
-      response_modalities: ['audio' as const],
-      speech_config: {
-        voice_config: {
-          prebuilt_voice_config: {
-            voice_name: voiceName,
+    const stream = await client.models.generateContentStream({
+      model: 'gemini-3.1-flash-tts-preview',
+      contents,
+      config: {
+        temperature: 1,
+        responseModalities: ['audio'],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: {
+              voiceName,
+            },
           },
         },
-      },
-    };
+      } as any,
+    });
 
     const audioChunks: Buffer[] = [];
     let mimeType = 'audio/L16;rate=24000';
 
-    const stream = await client.models.generateContentStream({
-      model: 'gemini-3.1-flash-tts-preview',
-      contents: text,
-      config,
-    });
+    for await (const chunk of stream as any) {
+      const part = chunk?.candidates?.[0]?.content?.parts?.[0] ?? chunk?.parts?.[0];
+      const inlineData = part?.inlineData ?? part?.inline_data;
+      if (!inlineData?.data) continue;
 
-    for await (const chunk of stream) {
-      if (!chunk.parts) continue;
-      const part = chunk.parts[0];
-      if (part?.inline_data?.data) {
-        audioChunks.push(Buffer.from(part.inline_data.data, 'base64'));
-        if (part.inline_data.mime_type) {
-          mimeType = part.inline_data.mime_type;
-        }
-      }
+      audioChunks.push(Buffer.from(inlineData.data, 'base64'));
+      mimeType = inlineData.mimeType ?? inlineData.mime_type ?? mimeType;
     }
 
     if (audioChunks.length === 0) {
@@ -97,14 +97,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let audioData = Buffer.concat(audioChunks);
     let finalMimeType = mimeType;
 
-    // Convert raw PCM (audio/L16) to WAV with proper header
     if (mimeType.includes('audio/L') || (!mimeType.includes('wav') && !mimeType.includes('mp3') && !mimeType.includes('ogg'))) {
       audioData = convertToWav(audioData, mimeType);
       finalMimeType = 'audio/wav';
     }
 
-    res.setHeader('Content-Type', 'application/json');
-    res.setHeader('Cache-Control', 'no-cache');
     return res.status(200).json({
       audio: audioData.toString('base64'),
       mimeType: finalMimeType,
