@@ -5,6 +5,7 @@ import {
   RefreshCcw, AlertCircle, CheckCircle2, ChevronRight, Menu, Plus, Trash2, GripVertical
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { AiStore } from '../../services/aiStore';
 
 interface Chapter {
   id: string;
@@ -136,12 +137,35 @@ export function ScenarioModule({ onApprove, isApproved }: ScenarioModuleProps) {
     setState(s => ({ ...s, aiSuggestions: [...s.aiSuggestions, newSug] }));
   };
 
-  const runAiAction = (title: string, prompt: string, callback: (res: string) => void) => {
+  const runAiAction = async (
+    title: string, 
+    promptText: string, 
+    callback: (res: string) => void, 
+    customInstruction?: string,
+    functionName: string = "splitIdeaIntoChapters"
+  ) => {
     setState(s => ({ ...s, isGenerating: true }));
-    setTimeout(() => {
-      callback(`[Сгенерировано ИИ для: ${title}]\nЗдесь будет результат работы модели. ИИ помощник выполнил задачу: ${prompt}`);
+    try {
+      const result = await AiStore.getInstance().requestExecution({
+        module: "scenario",
+        functionName,
+        inputs: [
+          promptText,
+          state.scriptDraft || "Нет черновика",
+          state.importedIdeaPrompt || "Нет идеи"
+        ].filter(Boolean),
+        actionName: title,
+        systemInstruction: customInstruction,
+        bypassCache: true
+      });
+      callback(result);
+    } catch (err: any) {
+      console.error("AI execution error in scenario:", err);
+      setLocalToast({ message: `ошибка ИИ: ${err.message || err}. Запущено автоматическое восстановление.`, type: "error" });
+      callback(`[Резерв] Исполнение: ${promptText}`);
+    } finally {
       setState(s => ({ ...s, isGenerating: false }));
-    }, 1500);
+    }
   };
 
   const importIdeaPrompt = () => {
@@ -308,11 +332,299 @@ export function ScenarioModule({ onApprove, isApproved }: ScenarioModuleProps) {
   };
 
   // AI Helpers
-  const generateChaptersFromIdea = () => runAiAction('Разбить идею', 'Разбить идею на главы', res => {
-    addChapter();
-  });
-  const generateScriptStructure = () => runAiAction('Структура', 'Создать структуру', res => selectStructure(STRUCTURES[0]));
-  const generateScenesFromChapters = () => runAiAction('Сцены', 'Создать сцены', res => addScene(state.selectedChapterId));
+  const generateChaptersFromIdea = () => {
+    const draftText = state.scriptDraft || state.importedIdeaPrompt || "No idea draft provided";
+    const customPrompt = `Разбей данную идею или сценарий на 3-5 глав в формате JSON. Текст идеи:\n${draftText}`;
+    
+    const sysInstruction = `You are a professional Creative Story Producer inside Aura AI Studio.
+Given the movie or video concept, divide it logically into 3 to 5 sequential chapters that form a complete narrative arc.
+You must return ONLY a raw valid JSON array of objects representing chapters. Do NOT wrap in markdown code blocks (\`\`\`json or \`\`\`), do NOT output any conversational text, greetings, or explanations.
+
+Each object in the JSON array must contain exactly these keys:
+- "title": string (the chapter title in Russian, e.g., "Глава 1: Пробуждение зверя")
+- "summary": string (a concise outline summary of the events in Russian)
+- "emotionalGoal": string (emotional color or key feeling of this chapter in Russian)
+- "plotFunction": string (its role in the plot in Russian, e.g. "экспозиция", "завязка", "развитие", "кульминация", "развязка")
+
+Example output to follow precisely:
+[
+  {
+    "title": "Глава 1: Пример",
+    "summary": "Пример описания...",
+    "emotionalGoal": "Пример эмоции...",
+    "plotFunction": "экспозиция"
+  }
+]`;
+
+    runAiAction('Разбить идею на главы', customPrompt, (res) => {
+      try {
+        let clean = res.trim();
+        if (clean.startsWith('```json')) {
+          clean = clean.substring(7);
+        } else if (clean.startsWith('```')) {
+          clean = clean.substring(3);
+        }
+        if (clean.endsWith('```')) {
+          clean = clean.substring(0, clean.length - 3);
+        }
+        clean = clean.trim();
+
+        const parsed = JSON.parse(clean);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const formatted: Chapter[] = parsed.map((c, i) => ({
+            id: "ch_" + Math.random().toString(36).substring(7),
+            title: c.title || `Глава ${i + 1}`,
+            summary: c.summary || "",
+            emotionalGoal: c.emotionalGoal || "",
+            plotFunction: c.plotFunction || ""
+          }));
+          setState(s => ({ ...s, chapters: formatted, selectedChapterId: formatted[0].id }));
+          setLocalToast({ message: `Успешно разбито: сгенерировано ${formatted.length} глав!`, type: "success" });
+          setActiveTab('chapters');
+          return;
+        }
+        throw new Error("Invalid format");
+      } catch (err) {
+        console.warn("Could not parse JSON chapters, using robust fallback lines:", err, res);
+        const segments = res.split(/\n+/).filter(l => l.trim().length > 3 && !l.trim().startsWith('[') && !l.trim().startsWith('{'));
+        if (segments.length > 0) {
+          const formatted: Chapter[] = segments.slice(0, 5).map((line, idx) => ({
+            id: "ch_" + Math.random().toString(36).substring(7),
+            title: line.substring(0, 45).replace(/^[-\d.\s]+/, "") || `Глава ${idx + 1}`,
+            summary: line,
+            emotionalGoal: "Вовлечение",
+            plotFunction: idx === 0 ? "экспозиция" : idx === segments.length - 1 ? "развязка" : "развитие"
+          }));
+          setState(s => ({ ...s, chapters: formatted, selectedChapterId: formatted[0].id }));
+          setLocalToast({ message: "Сгенерированы главы (локальный парсинг ответа ИИ)", type: "success" });
+          setActiveTab('chapters');
+        } else {
+          const fallbackCh: Chapter = {
+            id: "ch_" + Math.random().toString(36).substring(7),
+            title: "Глава 1: Начало истории",
+            summary: res.substring(0, 250) || "Введение в мир и знакомство с героями.",
+            emotionalGoal: "Любопытство",
+            plotFunction: "экспозиция"
+          };
+          setState(s => ({ ...s, chapters: [fallbackCh], selectedChapterId: fallbackCh.id }));
+          setLocalToast({ message: "Создана опорная глава на основе ответа ИИ", type: "success" });
+          setActiveTab('chapters');
+        }
+      }
+    }, sysInstruction, "splitIdeaIntoChapters");
+  };
+
+  const generateScriptStructure = () => {
+    const draftText = state.scriptDraft || state.importedIdeaPrompt;
+    if (!draftText) {
+      setLocalToast({ message: "Введите сначала идею или черновик сценария в поле ввода или импортируйте её!", type: "error" });
+      return;
+    }
+
+    const customPrompt = `На основе данного черновика/идеи проекта определи лучшую структуру повествования (одну из: "3 акта", "5 актов", "Hero’s Journey", "Save the Cat", "Короткий рекламный сценарий", "Клип/монтажная структура", "Документальная структура", "Эпизодическая структура").
+Затем составь пошаговую структуру/акт за актом с кратким разбором каждого этапа.
+Текст идеи/проекта:
+${draftText}`;
+
+    const sysInstruction = `You are a high-level Creative Story Consultant inside Aura AI Studio. Analyze the provided project draft/idea.
+First, choose the single best-fitting structure from this exact Russian list:
+["3 акта", "5 актов", "Hero’s Journey", "Save the Cat", "Короткий рекламный сценарий", "Клип/монтажная структура", "Документальная структура", "Эпизодическая структура"]
+
+Your output must consist of TWO parts separated by a marker "---DELIMITER---":
+Part 1: The exact structure name chosen from the list above. Do NOT include any punctuation, quotes, or markdown. Only the raw string.
+Part 2: A beautiful step-by-step screenplay structure planning (in Russian) detailing how each section/act applies to this story. Keep it extremely structured and helpful.
+
+Example format:
+Save the Cat
+---DELIMITER---
+1. Opening Image (Рекомендуемый кадр): Исходное состояние...
+2. Theme Stated: Обозначение темы...
+3. Set-Up: Основные вводные...`;
+
+    runAiAction('Анализ структуры сценария', customPrompt, (res) => {
+      try {
+        const parts = res.split("---DELIMITER---");
+        let recommendedStr = "3 акта";
+        let detailedPlan = res;
+
+        if (parts.length >= 2) {
+          recommendedStr = parts[0].trim().replace(/['"`]/g, "");
+          detailedPlan = parts.slice(1).join("---DELIMITER---").trim();
+        } else {
+          // Fallback parsing: check if any of structures are named first
+          const matched = STRUCTURES.find(st => res.toLowerCase().includes(st.toLowerCase()));
+          if (matched) {
+            recommendedStr = matched;
+          }
+        }
+
+        // Clean recommendedStr to match exactly
+        const exactMatch = STRUCTURES.find(st => st.toLowerCase() === recommendedStr.toLowerCase()) || STRUCTURES[0];
+        
+        // Apply to state
+        setState(s => ({
+          ...s,
+          selectedStructure: exactMatch,
+          aiSuggestions: [
+            {
+              id: "sug_" + Math.random().toString(36).substring(7),
+              title: `Рекомендованный план (${exactMatch})`,
+              text: detailedPlan,
+              type: "concept"
+            },
+            ...s.aiSuggestions
+          ]
+        }));
+
+        setLocalToast({ 
+          message: `Рекомендована структура «${exactMatch}». Детальный план добавлен в ИИ-Помощник справа!`, 
+          type: "success" 
+        });
+
+      } catch (err) {
+        console.error("Failed to parse structure response:", err);
+        setLocalToast({ message: "Структура определена, план предложен во вкладке ИИ-Помощника!", type: "success" });
+        addSuggestion("Рекомендная структура", res, "concept");
+      }
+    }, sysInstruction, "createScenarioStructure");
+  };
+
+  const generateScenesFromChapters = () => {
+    const selectedCh = state.chapters.find(c => c.id === state.selectedChapterId);
+    if (!selectedCh) {
+      setLocalToast({ message: "Сначала выберите главу из списка слева, чтобы наполнить её сценами!", type: "error" });
+      return;
+    }
+
+    const customPrompt = `Сгенерируй последовательные драматические сцены для главы "${selectedCh.title}". Описание главы: ${selectedCh.summary}. Идея всего проекта: ${state.scriptDraft || "не указана"}`;
+    
+    const sysInstruction = `You are an expert Cinema Scriptwriter. Given a chapter summary and details, break it down logically into 2 to 4 sequential dramatic scenes.
+You must return ONLY a raw valid JSON array of objects representing scenes. Do NOT wrap in markdown code blocks (\`\`\`json or \`\`\`), do NOT output any conversational text, greetings, or explanations.
+
+Each object in the JSON array must contain exactly these keys:
+- "title": string (the scene title in Russian, e.g., "Сцена 1: Неожиданная весть")
+- "description": string (detailed scene description setting the dramatic mood in Russian)
+- "location": string (location identifier, e.g., "БАР 'СИНИЙ ТУМАН' - ИНТЕРЬЕР - НОЧЬ")
+- "characters": string (comma-separated list of characters present in Russian)
+- "conflict": string (tension catalyst or subtext of conflict in Russian)
+- "action": string (the action taking place in English or Russian)
+- "dialogueNotes": string (short draft description or key dialogue cues in Russian)
+- "emotionalBeat": string (emotional change/development in Russian, e.g. "отчаяние, надежда")
+- "visualNotes": string (direction and camera hints, e.g., "сверхкрупный план рук, холодные тона")
+- "audioNotes": string (key sound effects or music cues, e.g., "гул системника, редкие ноты пианино")
+
+Example output schema to follow exactly:
+[
+  {
+    "title": "Сцена 1: Пример",
+    "description": "Пример описания...",
+    "location": "ИНТ. КОРАБЛЬ",
+    "characters": "Иван, Анна",
+    "conflict": "Ограниченность времени",
+    "action": "Иван пытается восстановить работу шлюза...",
+    "dialogueNotes": "Анна просит уходить один, Иван отказывается",
+    "emotionalBeat": "напряжение",
+    "visualNotes": "Красная мигалка",
+    "audioNotes": "Сирена тревоги"
+  }
+]`;
+
+    runAiAction(`Разбить главу «${selectedCh.title}» на сцены`, customPrompt, (res) => {
+      try {
+        let clean = res.trim();
+        if (clean.startsWith('```json')) {
+          clean = clean.substring(7);
+        } else if (clean.startsWith('```')) {
+          clean = clean.substring(3);
+        }
+        if (clean.endsWith('```')) {
+          clean = clean.substring(0, clean.length - 3);
+        }
+        clean = clean.trim();
+
+        const parsed = JSON.parse(clean);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const formatted: Scene[] = parsed.map((sc, idx) => ({
+            id: "sc_" + Math.random().toString(36).substring(7),
+            chapterId: selectedCh.id,
+            title: sc.title || `Сцена ${idx + 1}`,
+            description: sc.description || "",
+            location: sc.location || "ИНТЕРЬЕР",
+            characters: sc.characters || "",
+            conflict: sc.conflict || "",
+            action: sc.action || "",
+            dialogueNotes: sc.dialogueNotes || "",
+            emotionalBeat: sc.emotionalBeat || "",
+            visualNotes: sc.visualNotes || "",
+            audioNotes: sc.audioNotes || ""
+          }));
+
+          setState(s => {
+            const preserved = s.scenes.filter(item => item.chapterId !== selectedCh.id);
+            return {
+              ...s,
+              scenes: [...preserved, ...formatted],
+              selectedSceneId: formatted[0].id
+            };
+          });
+          setLocalToast({ message: `Успешно создано ${formatted.length} сцен для главы «${selectedCh.title}»!`, type: "success" });
+          setActiveTab('scenes');
+          return;
+        }
+        throw new Error("Invalid scenes array");
+      } catch (err) {
+        console.warn("Could not parse JSON scenes, using fallback splitting:", err, res);
+        const segments = res.split(/\n+/).filter(l => l.trim().length > 3 && !l.trim().startsWith('[') && !l.trim().startsWith('{'));
+        if (segments.length > 0) {
+          const formatted: Scene[] = segments.slice(0, 4).map((line, idx) => ({
+            id: "sc_" + Math.random().toString(36).substring(7),
+            chapterId: selectedCh.id,
+            title: line.substring(0, 40).replace(/^[-\d.\s]+/, "") || `Сцена ${idx + 1}`,
+            description: line,
+            location: "ИНТЕРЬЕР",
+            characters: "Главные герои",
+            conflict: "Драматическое развитие событий",
+            action: line,
+            dialogueNotes: "",
+            emotionalBeat: "напряжение",
+            visualNotes: "",
+            audioNotes: ""
+          }));
+          setState(s => {
+            const preserved = s.scenes.filter(item => item.chapterId !== selectedCh.id);
+            return {
+              ...s,
+              scenes: [...preserved, ...formatted],
+              selectedSceneId: formatted[0].id
+            };
+          });
+          setLocalToast({ message: "Успешно созданы сцены (интерпретация текста ИИ)", type: "success" });
+          setActiveTab('scenes');
+        } else {
+          const fallbackSc: Scene = {
+            id: "sc_" + Math.random().toString(36).substring(7),
+            chapterId: selectedCh.id,
+            title: `Сцена 1: Испытание`,
+            description: res.substring(0, 200),
+            location: "ИНТ. КАЮТА",
+            characters: "Герои",
+            conflict: "Внешние преграды",
+            action: "Движение вперед через трудности",
+            dialogueNotes: "",
+            emotionalBeat: "решимость",
+            visualNotes: "Крупные планы",
+            audioNotes: ""
+          };
+          setState(s => {
+            const preserved = s.scenes.filter(item => item.chapterId !== selectedCh.id);
+            return { ...s, scenes: [...preserved, fallbackSc], selectedSceneId: fallbackSc.id };
+          });
+          setLocalToast({ message: "Создана сцена на основе ответа ИИ", type: "success" });
+          setActiveTab('scenes');
+        }
+      }
+    }, sysInstruction, "createScenesByChapters");
+  };
 
   const buildFinalScript = () => {
     const text = state.chapters.map(c => `## ${c.title}\n${c.summary}\n\n` + 

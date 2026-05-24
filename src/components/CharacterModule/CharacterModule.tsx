@@ -356,29 +356,58 @@ export function CharacterModule({ onApprove, isApproved }: { onApprove: () => vo
         seed = Math.floor(Math.random() * 999999999).toString();
       }
 
-      const hashStr = `hash_${generateHash(prompt + "||" + seed + "||" + char.generationMode)}`;
-      const inputs = [prompt, `Seed: ${seed}`, `Style: ${char.selectedImageStyle || "Реализм"}`];
-
-      // Safe proxy execution call to centralized AI action routing
-      await AiStore.getInstance().requestExecution({
-        module: "characters",
-        functionName: char.generationMode === "reference_guided" ? "generateCharacterByPhoto" : "generateCharacterByText",
-        inputs,
-        actionName: `Генерация фото ${char.characterName}`
-      });
-
       const gender = getGenderForCharacter(char);
-      const englishStyle = char.selectedImageStyle === "Реализм" ? "photorealistic film portrait" 
-                         : char.selectedImageStyle === "Кинематографичный" ? "epic cinematic dramatic scene portrait"
-                         : char.selectedImageStyle === "Анимационный" ? "gorgeous anime animation portrait"
-                         : char.selectedImageStyle === "Концепт-арт" ? "stylized digital concept art portrait"
-                         : char.selectedImageStyle === "Комикс" ? "retro comic book drawing portrait"
-                         : char.selectedImageStyle === "Нуар" ? "black and white hypercontrast moody noir portrait"
-                         : char.selectedImageStyle === "Фэнтези" ? "magical mythical fantasy illustration portrait"
-                         : char.selectedImageStyle === "Киберпанк" ? "futuristic neon cyberpunk portrait"
-                         : `portrait, style of ${char.selectedImageStyle || "cinematic"}`;
+      const selectedStyle = char.selectedImageStyle || "Реализм";
+      const englishStyle = selectedStyle === "Реализм" ? "photorealistic film portrait, 35mm photograph" 
+                         : selectedStyle === "Кинематографичный" ? "epic cinematic dramatic scene portrait"
+                         : selectedStyle === "Анимационный" ? "gorgeous anime animation portrait"
+                         : selectedStyle === "Концепт-арт" ? "stylized digital concept art portrait"
+                         : selectedStyle === "Комикс" ? "retro comic book drawing portrait"
+                         : selectedStyle === "Нуар" ? "black and white hypercontrast moody noir portrait"
+                         : selectedStyle === "Фэнтези" ? "magical mythical fantasy illustration portrait"
+                         : selectedStyle === "Киберпанк" ? "futuristic neon cyberpunk portrait"
+                         : `portrait, style of ${selectedStyle.toLowerCase()}`;
 
-      const textForImage = `${englishStyle} of a ${gender === 'female' ? 'woman' : 'man'}, named ${char.characterName || 'actor'}, role: ${char.characterRole || 'person'}, ${char.appearanceDescription || ''}, wearing: ${char.outfitDescription || ''}, expression: ${char.selectedExpression || 'neutral'}`
+      // Call Gemini to translate and extract country, locality, nationality or ethnic traits
+      const detailsToCompile = `
+Name: ${char.characterName}
+Gender: ${gender}
+Role: ${char.characterRole}
+Age: ${char.characterAge}
+Full Bio / Description: ${char.characterDescription}
+Appearance Details: ${char.appearanceDescription}
+Outfit Details: ${char.outfitDescription}
+Style Format: ${englishStyle}
+Expression: ${char.selectedExpression || "neutral"}
+`;
+
+      const compilationInstruction = `You are a professional Creative Casting Director. 
+Your job is to translate and expand the character profile into a highly descriptive English image generation prompt (maximum 280 characters).
+
+CRITICAL RULES:
+1. Examine the name, bio, and descriptions for any Country, Location, Ethnicity, Race or Nationality (e.g. "Индия", "Japan", "Россия", "Италия", "African", "Asian", "Indian", etc.). Translate it and describe appropriate ethnic traits (facial structure, skin tone, hair texture, ambient motifs) to match perfectly.
+2. The entire output prompt MUST be in English.
+3. Focus strictly on portrait appearance details: face traits, clothing, lighting, camera shot type, artistic medium.
+4. Output ONLY the raw compiled English prompt. Do NOT wrap in quotes or preface with "Prompt:".`;
+
+      let generatedPrompt = "";
+      try {
+        generatedPrompt = await AiStore.getInstance().requestExecution({
+          module: "characters",
+          functionName: char.generationMode === "reference_guided" ? "generateCharacterByPhoto" : "generateCharacterByText",
+          inputs: [detailsToCompile],
+          actionName: `Генерация фото ${char.characterName}`,
+          systemInstruction: compilationInstruction,
+          bypassCache: true
+        });
+      } catch (aiErr) {
+        console.warn("Gemini prompt compiler failed, using fallback:", aiErr);
+        generatedPrompt = `${englishStyle} of a ${gender === 'female' ? 'woman' : 'man'}, ${char.appearanceDescription || ''}, expression: ${char.selectedExpression || 'neutral'}`;
+      }
+
+      // Safe encodable string
+      const textForImage = generatedPrompt
+        .trim()
         .replace(/[^a-zA-Z0-9,\s\-]/g, "")
         .substring(0, 320);
 
@@ -387,7 +416,7 @@ export function CharacterModule({ onApprove, isApproved }: { onApprove: () => vo
       const newImageObj = {
         id: "img_" + Math.random().toString(36).substring(7),
         url: imageUrl,
-        prompt: `Portrait concept matching styling "${char.selectedImageStyle}". Seed code: ${seed}`
+        prompt: generatedPrompt
       };
 
       setCharacters(prev => prev.map(c => {
