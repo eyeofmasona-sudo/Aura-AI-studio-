@@ -92,6 +92,11 @@ export default function App() {
         setUnlockedSteps([...unlockedSteps, nextId]);
       }
     }
+    const stepLabel = specData[currentIndex]?.title || "Шаг";
+    setToast({ 
+      message: `«${stepLabel}» успешно зафиксирован и сохранен в пайплайн производства!`, 
+      type: "success" 
+    });
   };
 
   const handleUnlockAll = () => {
@@ -193,11 +198,13 @@ export default function App() {
             ) : activeStepId === 'step-2' ? (
               <CharacterModule 
                 key="step-2" 
+                isApproved={approvedSteps.includes('step-2')}
                 onApprove={() => handleApprove('step-2', getActiveIndex())} 
               />
             ) : activeStepId === 'step-3' ? (
               <ScenarioModule 
                 key="step-3" 
+                isApproved={approvedSteps.includes('step-3')}
                 onApprove={() => handleApprove('step-3', getActiveIndex())} 
               />
             ) : activeStepId === 'step-4' ? (

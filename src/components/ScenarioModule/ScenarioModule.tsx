@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   Upload, User, X, Sparkles, Wand2, Copy, 
   Save, Forward, Loader2, MessageSquare, Edit3,
@@ -60,26 +60,54 @@ interface ScenarioState {
 interface ScenarioModuleProps {
   key?: string | number;
   onApprove: () => void;
+  isApproved?: boolean;
 }
 
-export function ScenarioModule({ onApprove }: ScenarioModuleProps) {
-  const [state, setState] = useState<ScenarioState>({
-    importedIdeaPrompt: null,
-    importedCharacters: [],
-    scriptDraft: "",
-    selectedStructure: null,
-    selectedDuration: null,
-    selectedFormat: null,
-    chapters: [],
-    selectedChapterId: null,
-    scenes: [],
-    selectedSceneId: null,
-    dialogueLines: [],
-    finalScript: "",
-    aiSuggestions: [],
-    validationErrors: {},
-    isGenerating: false
+export function ScenarioModule({ onApprove, isApproved }: ScenarioModuleProps) {
+  const [state, setState] = useState<ScenarioState>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem("aura_scenario_state");
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error("Failed to parse aura_scenario_state", e);
+        }
+      }
+    }
+    return {
+      importedIdeaPrompt: null,
+      importedCharacters: [],
+      scriptDraft: "",
+      selectedStructure: null,
+      selectedDuration: null,
+      selectedFormat: null,
+      chapters: [],
+      selectedChapterId: null,
+      scenes: [],
+      selectedSceneId: null,
+      dialogueLines: [],
+      finalScript: "",
+      aiSuggestions: [],
+      validationErrors: {},
+      isGenerating: false
+    };
   });
+
+  const [localToast, setLocalToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  // Auto-save state to localStorage on state changes
+  useEffect(() => {
+    localStorage.setItem("aura_scenario_state", JSON.stringify(state));
+  }, [state]);
+
+  // Handle toast timeout
+  useEffect(() => {
+    if (localToast) {
+      const timer = setTimeout(() => setLocalToast(null), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [localToast]);
 
   const [activeTab, setActiveTab] = useState<'draft' | 'chapters' | 'scenes' | 'dialogues' | 'final'>('draft');
 
@@ -117,11 +145,101 @@ export function ScenarioModule({ onApprove }: ScenarioModuleProps) {
   };
 
   const importIdeaPrompt = () => {
-    setState(s => ({ ...s, importedIdeaPrompt: "Импортированная идея из модуля Идея и Промпт" }));
+    let contextStr = localStorage.getItem("aura_imported_idea_context");
+    let parsed: any = null;
+
+    if (!contextStr) {
+      const nativeStr = localStorage.getItem("aura_idea_prompt_state");
+      if (nativeStr) {
+        try {
+          const nativeParsed = JSON.parse(nativeStr);
+          parsed = {
+            ideaText: nativeParsed.ideaText,
+            finalPrompt: nativeParsed.finalPrompt,
+            logline: nativeParsed.generatedLogline,
+            synopsis: nativeParsed.generatedSynopsis,
+            selectedGenres: nativeParsed.selectedGenres,
+            selectedMoods: nativeParsed.selectedMoods,
+            selectedEra: nativeParsed.selectedEra,
+            selectedVisualStyle: nativeParsed.selectedVisualStyle,
+            selectedCameraStyle: nativeParsed.selectedCameraStyle
+          };
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    } else {
+      try {
+        parsed = JSON.parse(contextStr);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    if (!parsed || (!parsed.ideaText && !parsed.finalPrompt && !parsed.logline && !parsed.synopsis)) {
+      setLocalToast({ message: "Не обнаружено сохраненных идей или промптов. Сначала введите их на шаге «Идея»!", type: "error" });
+      return;
+    }
+
+    const idea = parsed.ideaText || "";
+    const prompt = parsed.finalPrompt || "";
+    const logline = parsed.logline || parsed.generatedLogline || "";
+    const synopsis = parsed.synopsis || parsed.generatedSynopsis || "";
+    const genres = (parsed.selectedGenres || []).join(", ");
+    const moods = (parsed.selectedMoods || []).join(", ");
+    
+    let importText = `📌 [ИМПОРТИРОВАННАЯ ИДЕЯ & ПРОМПТ]\n`;
+    if (idea) importText += `• ИДЕЯ: ${idea}\n`;
+    if (logline) importText += `• ЛОГЛАЙН: ${logline}\n`;
+    if (synopsis) importText += `• СИНОПСИС: ${synopsis}\n`;
+    if (genres) importText += `• ЖАНРЫ: ${genres}\n`;
+    if (moods) importText += `• НАСТРОЕНИЕ: ${moods}\n`;
+    if (parsed.selectedEra) importText += `• ЭПОХА: ${parsed.selectedEra}\n`;
+    if (parsed.selectedVisualStyle) importText += `• ВИЗУАЛЬНЫЙ СТИЛЬ: ${parsed.selectedVisualStyle}\n`;
+    if (prompt) importText += `• РЕЖИССЁРСКИЙ ПРОМПТ: ${prompt}\n`;
+
+    setState(s => ({
+      ...s,
+      scriptDraft: (s.scriptDraft ? s.scriptDraft + "\n\n" : "") + importText.trim(),
+      importedIdeaPrompt: idea || prompt || "Идея импортирована"
+    }));
+    setLocalToast({ message: "Контекст темы и идеи успешно импортирован!", type: "success" });
   };
 
   const importCharacters = () => {
-    setState(s => ({ ...s, importedCharacters: [{ id: '1', name: 'Главный герой' }] }));
+    const saved = localStorage.getItem("aura_character_state");
+    if (!saved) {
+      setLocalToast({ message: "Персонажи не найдены. Создайте их во вкладке «Персонажи»!", type: "error" });
+      return;
+    }
+
+    try {
+      const parsed = JSON.parse(saved);
+      const charList: any[] = parsed.characters || [];
+      if (charList.length === 0) {
+        setLocalToast({ message: "На шаге «Персонажи» нет созданных героев!", type: "error" });
+        return;
+      }
+
+      let importText = `👥 [ИМПОРТИРОВАННЫЕ ПЕРСОНАЖИ]\n`;
+      charList.forEach((c) => {
+        importText += `• ${c.characterName} (${c.characterRole || "Без роли"}, ${c.characterAge || "Adulthood"} лет):\n`;
+        if (c.characterDescription) importText += `  Биография & описание: ${c.characterDescription}\n`;
+        if (c.appearanceDescription) importText += `  Внешние черты: ${c.appearanceDescription}\n`;
+        if (c.outfitDescription) importText += `  Стиль одежды: ${c.outfitDescription}\n`;
+        if (c.characterGoal) importText += `  Мечта и цели: ${c.characterGoal}\n`;
+      });
+
+      setState(s => ({
+        ...s,
+        scriptDraft: (s.scriptDraft ? s.scriptDraft + "\n\n" : "") + importText.trim(),
+        importedCharacters: charList
+      }));
+      setLocalToast({ message: `Успешно импортирован профиль героев (${charList.length})!`, type: "success" });
+    } catch (err) {
+      console.error(err);
+      setLocalToast({ message: "Произошла ошибка при разборе данных героев", type: "error" });
+    }
   };
 
   const updateScriptDraft = (value: string) => updateField('scriptDraft', value);
@@ -227,7 +345,32 @@ export function ScenarioModule({ onApprove }: ScenarioModuleProps) {
   const sendToTTSModule = () => alert("Передано в Голос (TTS)");
 
   return (
-    <div className="w-full flex flex-col lg:flex-row gap-6 h-full">
+    <div className="w-full flex flex-col lg:flex-row gap-6 h-full relative">
+      {/* Local Toast Alert */}
+      <AnimatePresence>
+        {localToast && (
+          <motion.div
+            initial={{ opacity: 0, y: -25, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: -15, scale: 0.95 }}
+            className={`fixed top-6 right-6 z-[100] flex items-center gap-2 px-4 py-3.5 rounded-xl border text-sm font-medium shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-md bg-slate-900/95 min-w-[300px] ${
+              localToast.type === 'success' 
+                ? 'border-emerald-500/40 text-emerald-400' 
+                : 'border-rose-500/40 text-rose-400'
+            }`}
+          >
+            <AlertCircle className="w-4 h-4 shrink-0 text-current" />
+            <span className="flex-1">{localToast.message}</span>
+            <button 
+              onClick={() => setLocalToast(null)}
+              className="ml-3 hover:text-white text-slate-400 text-xs cursor-pointer p-0.5"
+            >
+              ✕
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Рабочая область */}
       <div className="flex-1 w-full flex flex-col min-h-0 bg-transparent relative pb-10 custom-scrollbar">
         
@@ -245,10 +388,14 @@ export function ScenarioModule({ onApprove }: ScenarioModuleProps) {
             
             <button
               onClick={onApprove}
-              className="px-6 py-2 rounded-xl bg-[#00F0FF] text-black font-bold uppercase text-xs tracking-widest hover:bg-[#4dffff] transition-colors flex items-center gap-2"
+              className={`px-6 py-2 rounded-xl font-bold uppercase text-xs tracking-widest transition-all flex items-center gap-2 ${
+                isApproved 
+                  ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400' 
+                  : 'bg-[#00F0FF] text-black hover:bg-[#4dffff] shadow-[0_0_15px_rgba(0,240,255,0.2)]'
+              }`}
             >
               <CheckCircle2 className="w-4 h-4" />
-              Утвердить сценарий
+              {isApproved ? 'Сценарий утвержден ✓' : 'Утвердить сценарий'}
             </button>
           </div>
 

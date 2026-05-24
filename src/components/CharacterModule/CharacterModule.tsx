@@ -12,6 +12,7 @@ export interface CharacterProfile {
   characterName: string;
   characterRole: string;
   characterAge: string;
+  gender?: 'male' | 'female' | 'other';
   characterDescription: string;
   appearanceDescription: string;
   outfitDescription: string;
@@ -47,28 +48,33 @@ export interface ModuleState {
   importedIdeaContext: any | null;
 }
 
-const CINEMATIC_PORTRAITS = [
+const FEMALE_PORTRAITS = [
   "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&q=80",
-  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=80",
   "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800&q=80",
-  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=800&q=80",
   "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800&q=80",
-  "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=800&q=80",
   "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=800&q=80",
-  "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=800&q=80",
   "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=800&q=80",
-  "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=800&q=80",
   "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&q=80",
-  "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?w=800&q=80",
   "https://images.unsplash.com/photo-1548142813-c348350df52b?w=800&q=80",
-  "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800&q=80",
   "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=800&q=80",
-  "https://images.unsplash.com/photo-1488161628813-04466f872be2?w=800&q=80",
   "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800&q=80",
-  "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=800&q=80",
-  "https://images.unsplash.com/photo-1554151228-14d9def656e4?w=800&q=80",
-  "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=800&q=80",
+  "https://images.unsplash.com/photo-1554151228-14d9def656e4?w=800&q=80"
 ];
+
+const MALE_PORTRAITS = [
+  "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=80",
+  "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=800&q=80",
+  "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=800&q=80",
+  "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=800&q=80",
+  "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=800&q=80",
+  "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?w=800&q=80",
+  "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800&q=80",
+  "https://images.unsplash.com/photo-1488161628813-04466f872be2?w=800&q=80",
+  "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=800&q=80",
+  "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=800&q=80"
+];
+
+const CINEMATIC_PORTRAITS = [...FEMALE_PORTRAITS, ...MALE_PORTRAITS];
 
 const STYLES = ["Реализм", "Кинематографичный", "Фотореализм", "Анимационный", "Концепт-арт", "Комикс", "Нуар", "Фэнтези", "Киберпанк", "Рекламный глянец"];
 const PORTRAITS = ["Крупный портрет", "Поясной портрет", "Полный рост", "Профиль", "3/4 ракурс", "Кадр из сцены"];
@@ -79,7 +85,7 @@ const ANGLES = ["Прямо", "Сверху", "Снизу", "Сбоку"];
 const BACKGROUNDS = ["Изолированный", "Размытый", "Интерьер", "Экстерьер"];
 const PALETTES = ["Яркая", "Монохром", "Пастельная", "Кинематографичная"];
 
-export function CharacterModule({ onApprove }: { onApprove: () => void; key?: React.Key }) {
+export function CharacterModule({ onApprove, isApproved }: { onApprove: () => void; isApproved?: boolean; key?: React.Key }) {
   const [characters, setCharacters] = useState<CharacterProfile[]>([]);
   const [activeCharacterId, setActiveCharacterId] = useState<string | null>(null);
   const [importedIdeaContext, setImportedIdeaContext] = useState<any | null>(null);
@@ -119,6 +125,7 @@ export function CharacterModule({ onApprove }: { onApprove: () => void; key?: Re
       characterName: "Дмитрий Корсаков",
       characterRole: "Капитан «Ауры»",
       characterAge: "42",
+      gender: "male",
       characterDescription: "Опытный астрофизик, преследуемый призраками прошлого. Сильный, волевой лидер экипажа.",
       appearanceDescription: "Утомленные серые глаза, короткая темная щетина, волевой подбородок, седина на висках.",
       outfitDescription: "Темно-синий полетный скафандр с эмблемой научной экспедиции.",
@@ -167,6 +174,34 @@ export function CharacterModule({ onApprove }: { onApprove: () => void; key?: Re
     return Math.abs(hash);
   };
 
+  const getGenderForCharacter = (char: CharacterProfile): 'male' | 'female' => {
+    if (char.gender === 'male') return 'male';
+    if (char.gender === 'female') return 'female';
+    
+    // Fallback adaptive keyword-based detection
+    const textToScan = `${char.characterName} ${char.characterRole} ${char.characterDescription} ${char.appearanceDescription}`.toLowerCase();
+    const femaleIndicators = [
+      'девушка', 'женщина', 'женский', 'героиня', 'актриса', 'she', 'her', 'woman', 'girl', 'female', 'lady', 'actress',
+      'елена', 'ковалева', 'петрова', 'алиса', 'мария', 'анна', 'ольга', 'татьяна', 'екатерина', 'софия', 'виктория'
+    ];
+    
+    // Check Russian female surname endings or first names
+    const nameParts = (char.characterName || "").toLowerCase().split(/\s+/);
+    for (const part of nameParts) {
+      if (part.endsWith('ва') || part.endsWith('на') || part.endsWith('ия') || part.endsWith('тра')) {
+        if (!['дмитрий', 'илья', 'никита', 'данила', 'саша', 'паша'].includes(part)) {
+          return 'female';
+        }
+      }
+    }
+
+    if (femaleIndicators.some(ind => textToScan.includes(ind))) {
+      return 'female';
+    }
+    
+    return 'male';
+  };
+
   const getCompiledPrompt = (char: CharacterProfile) => {
     const selectedImageStyle = char.selectedImageStyle || "Реализм";
     const selectedRealismLevel = char.selectedRealismLevel || "Высокий";
@@ -177,19 +212,30 @@ export function CharacterModule({ onApprove }: { onApprove: () => void; key?: Re
     const selectedCameraAngle = char.selectedCameraAngle || "Прямо";
     const selectedExpression = char.selectedExpression || "Нейтральная";
 
-    return `Cinematic high-fidelity character portrait.
-Project theme context: ${importedIdeaContext?.ideaText || ""}
-Character Name: ${char.characterName || "Unnamed"}
-Role inside story: ${char.characterRole || "Actor"}
-Age: ${char.characterAge || "Adulthood"}
-Overall description: ${char.characterDescription || ""}
-Appearance traits: ${char.appearanceDescription || ""}
-Outfit & Clothes styling: ${char.outfitDescription || ""}
-Emotion/Expression detail: ${char.emotionDescription || selectedExpression}
-Personality attributes: ${char.personalityDescription || ""}
-Goal & Conflicts: Goal is ${char.characterGoal || "none"}, conflict: ${char.characterConflict || "none"}.
-Visual modifiers: Image style format is ${selectedImageStyle}, realism standard is ${selectedRealismLevel}, portrait capture: ${selectedPortraitType}, rendering atmosphere lighting: ${selectedLighting}, background layout context: ${selectedBackground}, color palette: ${selectedColorPalette}, camera angle capture: ${selectedCameraAngle}.
-Negative instructions: ${char.negativePrompt || ""}`.trim();
+    // Build a clean, precise cinematic rendering prompt for Stable Diffusion / Midjourney
+    const genderWord = getGenderForCharacter(char) === 'female' ? "woman" : "man";
+    let styleTag = selectedImageStyle;
+    if (styleTag === "Реализм") styleTag = "highly detailed photorealistic, realism standard";
+    
+    const parts = [
+      `Cinematic ${selectedPortraitType.toLowerCase()} of ${char.characterName || "Unnamed"}, a ${char.characterAge || "30"} year old ${genderWord}`,
+      char.characterRole ? `role: ${char.characterRole}` : "",
+      char.appearanceDescription ? char.appearanceDescription.trim() : "",
+      char.outfitDescription ? `outfit: ${char.outfitDescription.trim()}` : "",
+      selectedExpression ? `expression: ${selectedExpression.toLowerCase()}` : "",
+      char.personalityDescription ? `traits: ${char.personalityDescription.trim()}` : "",
+      `style: ${styleTag}`,
+      selectedLighting ? `lighting: ${selectedLighting.toLowerCase()}` : "",
+      selectedBackground ? `background: ${selectedBackground.toLowerCase()}` : "",
+      selectedColorPalette ? `colors: ${selectedColorPalette.toLowerCase()}` : "",
+      selectedCameraAngle ? `shot: ${selectedCameraAngle.toLowerCase()} angle` : ""
+    ].filter(Boolean);
+
+    let finalPrompt = parts.join(", ") + ".";
+    if (char.negativePrompt) {
+      finalPrompt += ` Negative: ${char.negativePrompt}`;
+    }
+    return finalPrompt;
   };
 
   const handleAddField = (charId: string, field: keyof CharacterProfile, val: any) => {
@@ -321,9 +367,11 @@ Negative instructions: ${char.negativePrompt || ""}`.trim();
         actionName: `Генерация фото ${char.characterName}`
       });
 
-      // Map pseudo-deterministically to image matching user styling selection
-      const portraitIndex = generateHash(hashStr) % CINEMATIC_PORTRAITS.length;
-      const imageUrl = CINEMATIC_PORTRAITS[portraitIndex];
+      // Map pseudo-deterministically to image matching user styling and gender
+      const gender = getGenderForCharacter(char);
+      const portraitSet = gender === 'female' ? FEMALE_PORTRAITS : MALE_PORTRAITS;
+      const portraitIndex = generateHash(hashStr) % portraitSet.length;
+      const imageUrl = portraitSet[portraitIndex];
 
       const newImageObj = {
         id: "img_" + Math.random().toString(36).substring(7),
@@ -547,7 +595,7 @@ Negative instructions: ${char.negativePrompt || ""}`.trim();
               <div className="flex flex-col gap-6 animate-fade-in" key={activeChar.id}>
                 
                 {/* 1. fields */}
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   <div className="flex flex-col gap-1.5">
                     <span className="text-[10px] uppercase font-bold text-slate-400">Имя персонажа</span>
                     <input 
@@ -579,6 +627,19 @@ Negative instructions: ${char.negativePrompt || ""}`.trim();
                       onChange={e => handleAddField(activeChar.id, 'characterAge', e.target.value)}
                       className="w-full bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-[#00F0FF]/50"
                     />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <span className="text-[10px] uppercase font-bold text-slate-400">Пол персонажа</span>
+                    <select
+                      value={activeChar.gender || "female"}
+                      onChange={e => handleAddField(activeChar.id, 'gender', e.target.value)}
+                      className="w-full bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white focus:outline-none focus:border-[#00F0FF]/50 cursor-pointer"
+                    >
+                      <option value="female" className="bg-slate-900 text-white">Женский (Female)</option>
+                      <option value="male" className="bg-slate-900 text-white">Мужской (Male)</option>
+                      <option value="other" className="bg-slate-900 text-white">Другой / Универсал</option>
+                    </select>
                   </div>
                 </div>
 
@@ -871,9 +932,13 @@ Negative instructions: ${char.negativePrompt || ""}`.trim();
                 <div className="flex justify-end gap-3 mt-4 border-t border-slate-800 pt-4">
                   <button 
                     onClick={onApprove}
-                    className="px-6 py-2.5 rounded-lg bg-[#00F0FF] text-black hover:bg-[#4dffff] text-xs font-bold uppercase tracking-widest transition-all shadow-[0_0_15px_rgba(0,240,255,0.2)]"
+                    className={`px-6 py-2.5 rounded-lg text-xs font-bold uppercase tracking-widest transition-all ${
+                      isApproved 
+                        ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400' 
+                        : 'bg-[#00F0FF] text-black hover:bg-[#4dffff] shadow-[0_0_15px_rgba(0,240,255,0.2)]'
+                    }`}
                   >
-                    Подтвердить и зафиксировать
+                    {isApproved ? 'Успешно зафиксировано ✓' : 'Подтвердить и зафиксировать'}
                   </button>
                 </div>
 

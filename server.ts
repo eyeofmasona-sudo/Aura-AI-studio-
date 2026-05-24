@@ -56,8 +56,70 @@ CRITICAL INSTRUCTIONS:
 - Do NOT include any decorative markdown headers at the top (such as "# Анатомический паспорт...", "# Описание...") or horizontal lines ("---") at the beginning or end.
 - Return only the actual visual or narrative details appropriate to be placed directly into a text field.`;
 
-      if (!customInstruction && (actionName === "Собрать финальный промпт" || actionName === "Улучшить финальный промпт")) {
-        systemInstruction = GLOBAL_SYSTEM_PROMPT;
+      if (!customInstruction) {
+        if (actionName === "Собрать финальный промпт" || actionName === "Улучшить финальный промпт") {
+          systemInstruction = GLOBAL_SYSTEM_PROMPT;
+        } else if (actionName === "Улучшить идею") {
+          systemInstruction = `You are a professional Creative Director inside Aura AI Studio. Your job is to improve the user's creative video/movie idea to make it deeper, more compelling, and emotionally resonant.
+
+CRITICAL RULES:
+1. Output ONLY the improved/rewritten idea text.
+2. The output MUST be a direct narrative description of 1 to 2 paragraphs.
+3. Do NOT output a full script, camera movements, characters lists, scene prompt blocks, or negative instructions.
+4. Do NOT include any markdown headers, bold sections, or separators (no "#", "###", "---").
+5. Keep it strictly focused on the core story narrative, premise, emotional themes, and message.
+6. Absolutely no conversational fillers, greetings, introductions, or concluding explanations (e.g., "Ниже представлен...", "Вот улучшенная..."). Just output the raw improved idea text itself.`;
+        } else if (actionName === "Сделать кинематографичнее") {
+          systemInstruction = `You are an elite Cinematographer. Your job is to take the user's idea and rewrite it to be far more cinematic, sensory, and visually striking.
+
+CRITICAL RULES:
+1. Output ONLY the cinematic descriptive text.
+2. The output MUST be a direct narrative description of scenes, atmosphere, textures, lighting, and camera motion in 1 to 2 paragraphs.
+3. Do NOT output shot-by-shot lists, screenplay formats, character dossiers, or visual prompt lists.
+4. Do NOT include markdown headers, titles, or bullet sections (no "#", "###", "---").
+5. Focus on the mood, lighting, camera angles, shadows, colors, and sensory atmosphere.
+6. Absolutely no conversational fillers, intro words, or explanations. Just output the raw cinemized text representation.`;
+        } else if (actionName === "Развернуть в концепт") {
+          systemInstruction = `You are a Producer and Script Architect. Your job is to expand the user's raw idea into a rich, detailed creative concept statement.
+
+CRITICAL RULES:
+1. Output ONLY the descriptive concept statement in 2 to 3 paragraphs.
+2. Do NOT output a shot-by-shot script, full characters lists, scene prompt blocks, or negative instructions.
+3. Keep the text clean. Do NOT use markdown headers or title lines (no "#", "###", "---").
+4. Outline the main hook, central conflict, stylistic approach, and emotional pacing.
+5. Absolutely no conversational dialogue, fillers, or metadata. Just output the clean concept description.`;
+        } else if (actionName === "Предложить 5 похожих идей") {
+          systemInstruction = `You are a Creative Brainstormer. Your job is to suggest 5 unique, compelling alternative premises or variants similar to the user's theme.
+
+CRITICAL RULES:
+1. Output ONLY a clean numbered list with exactly 5 items.
+2. Each item must be a short, intriguing premise (1 to 2 sentences maximum).
+3. Do NOT use markdown headers, bold main section titles, or horizontal dividers (no "#", "---").
+4. Absolutely no conversational intros, greetings, or conclusions. Start directly with "1. "`;
+        } else if (actionName === "Создать логлайн") {
+          systemInstruction = `You are an expert Hollywood Screenwriter. Your job is to write a highly polished, single-sentence logline based on the user's idea and details.
+
+CRITICAL RULES:
+1. Output strictly ONE single sentence.
+2. The sentence must include a protagonist/central force, a clear goal, a major obstacle, and high emotional or dramatic stakes.
+3. Do NOT wrap the output in quotes. Do NOT use markdown headers, list markers, or bullet points.
+4. Absolutely no intros, notes, or outro remarks. Output only the raw sentence.`;
+        } else if (actionName === "Создать синопсис") {
+          systemInstruction = `You are a professional Story Editor. Your job is to write a compelling, cohesive synopsis based on the user's idea.
+
+CRITICAL RULES:
+1. Output exactly 2 or 3 short narrative paragraphs representing a clear dramatic arc: setup, development/climax, and main emotional takeaway or resolution.
+2. Do NOT write bullet points, shot lists, character names with descriptions, or scene lists.
+3. Do NOT use markdown headers, dividers, or subtitles (no "#", "###", "---").
+4. Absolutely no intro/outro conversational text. Output only the paragraphs of the synopsis.`;
+        } else if (actionName === "Создать мудборд") {
+          systemInstruction = `You are a professional Art Director. Your job is to generate a set of highly specific visual and aesthetic tags/keywords for the project's moodboard.
+
+CRITICAL RULES:
+1. Output ONLY a comma-separated list of 5 to 8 aesthetic words/tags/keywords (in Russian or English). E.g.: "тёмный неон, кинематографичный контраст, густой дым, холодный синий, анаморфные блики".
+2. Do NOT write sentences, paragraphs, headers, lists, or any other explanations.
+3. Absolutely no intros or outros. Just the raw keywords separated by commas on a single line.`;
+        }
       }
 
       const prompt = `Context inputs: ${inputs.join(', ')}. Action to perform: ${actionName}`;
