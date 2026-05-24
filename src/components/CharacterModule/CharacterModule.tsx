@@ -202,6 +202,44 @@ export function CharacterModule({ onApprove, isApproved }: { onApprove: () => vo
     return 'male';
   };
 
+  const getCountryAppearanceSuffix = (char: CharacterProfile): string => {
+    const textToScan = `${char.characterName} ${char.characterRole} ${char.characterDescription} ${char.appearanceDescription} ${importedIdeaContext?.ideaText || ""} ${importedIdeaContext?.synopsis || ""}`.toLowerCase();
+    
+    // Check for Armenia / Armenian
+    if (textToScan.includes("армени") || textToScan.includes("ереван") || textToScan.includes("armeni")) {
+      return "Armenian ethnic facial features, expressive eyes, Mediterranean/Armenian appearance";
+    }
+    // Check for Japan / Japanese
+    if (textToScan.includes("япони") || textToScan.includes("токио") || textToScan.includes("киото") || textToScan.includes("japan")) {
+      return "Japanese facial features, authentic East Asian appearance";
+    }
+    // Check for China / Chinese
+    if (textToScan.includes("китай") || textToScan.includes("шанхай") || textToScan.includes("peking") || textToScan.includes("chin")) {
+      return "Chinese facial features, East Asian appearance";
+    }
+    // Check for Italy / Italian
+    if (textToScan.includes("итали") || textToScan.includes("рим") || textToScan.includes("ital")) {
+      return "Italian facial features, Mediterranean olive skin tone, dark hair";
+    }
+    // Check for France / French
+    if (textToScan.includes("франци") || textToScan.includes("париж") || textToScan.includes("franc")) {
+      return "French chic look, European facial features";
+    }
+    // Check for India / Indian
+    if (textToScan.includes("индия") || textToScan.includes("дели") || textToScan.includes("indi")) {
+      return "Indian facial features, South Asian warm skin tone, dark thick hair";
+    }
+    // Check for Egypt / Egyptian
+    if (textToScan.includes("египет") || textToScan.includes("каир") || textToScan.includes("egypt")) {
+      return "Egyptian classic facial features, Middle-Eastern/North-African appearance";
+    }
+    // Check for Russia / Russian
+    if (textToScan.includes("росси") || textToScan.includes("москв") || textToScan.includes("russ")) {
+      return "Slavic facial features, Russian appearance";
+    }
+    return "";
+  };
+
   const getCompiledPrompt = (char: CharacterProfile) => {
     const selectedImageStyle = char.selectedImageStyle || "Реализм";
     const selectedRealismLevel = char.selectedRealismLevel || "Высокий";
@@ -217,8 +255,11 @@ export function CharacterModule({ onApprove, isApproved }: { onApprove: () => vo
     let styleTag = selectedImageStyle;
     if (styleTag === "Реализм") styleTag = "highly detailed photorealistic, realism standard";
     
+    const countrySuffix = getCountryAppearanceSuffix(char);
+
     const parts = [
       `Cinematic ${selectedPortraitType.toLowerCase()} of ${char.characterName || "Unnamed"}, a ${char.characterAge || "30"} year old ${genderWord}`,
+      countrySuffix ? `ethnic look: ${countrySuffix}` : "",
       char.characterRole ? `role: ${char.characterRole}` : "",
       char.appearanceDescription ? char.appearanceDescription.trim() : "",
       char.outfitDescription ? `outfit: ${char.outfitDescription.trim()}` : "",
@@ -455,7 +496,7 @@ CRITICAL RULES:
         functionName: "generateCharactersFromIdea",
         inputs: [query],
         actionName: "Сгенерировать персонажей списком JSON",
-        systemInstruction: "You are an expert movie director. Given project metadata, respond ONLY with a valid JSON array of 3-4 distinct characters. Do not output any markdown code blocks, conversational text, or explanations. Direct raw JSON array matching this exact schema: Array<{ name: string, role: string, age: string, description: string, appearance: string, outfit: string, personality: string, goal: string, conflict: string }>. Your output must be syntactically perfect JSON."
+        systemInstruction: "You are an expert movie director. Given project metadata, respond ONLY with a valid JSON array of 3-4 distinct characters. Do not output any markdown code blocks, conversational text, or explanations. Direct raw JSON array matching this exact schema: Array<{ name: string, role: string, age: string, description: string, appearance: string, outfit: string, personality: string, goal: string, conflict: string }>. CRITICAL DIRECTIVE: If the movie context contains any specific Country name (e.g. Армения/Armenia, Япония/Japan, etc.), you MUST strictly tailor each character's appearance description ('appearance') and outfit styling ('outfit') to accurately match the national, ethnic, and cultural look of that country or region. Your output must be syntactically perfect JSON."
       });
 
       let cleaned = result.trim();
