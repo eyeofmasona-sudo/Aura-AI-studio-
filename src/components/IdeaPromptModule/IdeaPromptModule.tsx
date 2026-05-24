@@ -1,0 +1,582 @@
+import React, { useState, useRef } from 'react';
+import { 
+  Upload, FileAudio, X, Sparkles, Wand2, Copy, 
+  Save, Forward, Loader2, Film, MessageSquare, Plus, AlignLeft, Layout, Edit3,
+  RefreshCcw, Terminal
+} from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
+import { AiStore } from '../../services/aiStore';
+
+interface IdeaState {
+  uploadedAudioFile: File | null;
+  ideaText: string;
+  selectedGenres: string[];
+  selectedMoods: string[];
+  selectedEra: string | null;
+  selectedVisualStyle: string | null;
+  selectedCameraStyle: string | null;
+  generatedLogline: string;
+  generatedSynopsis: string;
+  generatedMoodboard: string[];
+  finalPrompt: string;
+  aiSuggestions: any[];
+  validationErrors: Record<string, string>;
+}
+
+export function IdeaPromptModule({ onApprove }: { onApprove: () => void, key?: React.Key }) {
+  const [state, setState] = useState<IdeaState>({
+    uploadedAudioFile: null,
+    ideaText: "",
+    selectedGenres: [],
+    selectedMoods: [],
+    selectedEra: null,
+    selectedVisualStyle: null,
+    selectedCameraStyle: null,
+    generatedLogline: "",
+    generatedSynopsis: "",
+    generatedMoodboard: [],
+    finalPrompt: "",
+    aiSuggestions: [],
+    validationErrors: {}
+  });
+
+  const [isAiLoading, setIsAiLoading] = useState<Record<string, boolean>>({});
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const GENRES = [
+    "Сай-фай", "Киберпанк", "Драма", "Триллер", "Фэнтези", "Хоррор", "Комедия", 
+    "Романтика", "Детектив", "Экшен", "Приключение", "Документальный", "Реклама", 
+    "Музыкальный клип", "Социальный ролик", "Обучающее видео", "Исторический", 
+    "Постапокалипсис", "Нуар", "Артхаус"
+  ];
+  const MOODS = [
+    "Мрачное", "Грустное", "Эпичное", "Напряжённое", "Спокойное", "Романтичное", 
+    "Весёлое", "Тревожное", "Таинственное", "Вдохновляющее", "Агрессивное", 
+    "Меланхоличное", "Мечтательное", "Динамичное", "Сюрреалистичное", "Тёплое", 
+    "Холодное", "Ностальгическое", "Минималистичное", "Кинематографичное"
+  ];
+  const ERAS = [
+    "Прошлое", "Настоящее", "Будущее", "Альтернативная история", "Средневековье", 
+    "80-е", "90-е", "2000-е", "Постапокалипсис", "Далёкое будущее"
+  ];
+  const VISUALS = ["Кинематографичный", "Аниме", "Комикс", "Реализм", "Пиксель-арт", "Неоновый", "Пленочный"];
+  const CAMERAS = ["Широкоугольная", "Крупный план", "Дрон", "Голландский угол", "От первого лица", "Статичная"];
+
+  // A. Upload Audio
+  const handleAudioDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+      const file = e.dataTransfer.files[0];
+      if (file.type.startsWith('audio/')) {
+        setState(s => ({ ...s, uploadedAudioFile: file, validationErrors: { ...s.validationErrors, audio: '' } }));
+      } else {
+        setState(s => ({ ...s, validationErrors: { ...s.validationErrors, audio: 'Неподдерживаемый формат. Только аудио.' } }));
+      }
+    }
+  };
+  
+  const handleAudioSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      setState(s => ({ ...s, uploadedAudioFile: e.target.files![0], validationErrors: { ...s.validationErrors, audio: '' } }));
+    }
+  };
+
+  const removeAudioFile = () => setState(s => ({ ...s, uploadedAudioFile: null }));
+  const openAudioUpload = () => fileInputRef.current?.click();
+
+  // B. Idea Editor
+  const updateIdeaText = (val: string) => setState(s => ({ ...s, ideaText: val }));
+
+  // C. Selectors
+  const selectParam = (key: keyof IdeaState, val: string) => {
+    setState(s => ({ ...s, [key]: s[key] === val ? null : val }));
+  };
+
+  const selectMultiParam = (key: 'selectedGenres' | 'selectedMoods', val: string) => {
+    setState(s => ({
+       ...s,
+       [key]: s[key].includes(val) ? s[key].filter(i => i !== val) : [...s[key], val]
+    }));
+  };
+
+  // AI Actions (Secure API routing via Centralized AiStore Router)
+  const runAiAction = async (actionKey: string, promptInfo: string, callback: (res: string) => void) => {
+    setIsAiLoading(prev => ({ ...prev, [actionKey]: true }));
+    try {
+      const actionMap: Record<string, string> = {
+        "Улучшить идею": "improveIdea",
+        "Сделать кинематографичнее": "makeCinematic",
+        "Развернуть в концепт": "expandConcept",
+        "Предложить 5 похожих идей": "similarIdeas",
+        "Создать логлайн": "generateLogline",
+        "Создать синопсис": "generateSynopsis",
+        "Создать мудборд": "generateMoodboard",
+        "Собрать финальный промпт": "assemblePrompt",
+        "Улучшить финальный промпт": "improveFinalPrompt",
+        "Анализ аудио": "audioAnalysis",
+      };
+      
+      const functionName = actionMap[actionKey] || "improveIdea";
+      const inputs = [promptInfo, state.ideaText, state.selectedGenres.join(', '), state.selectedMoods.join(', '), state.selectedEra].filter(Boolean) as string[];
+
+      const result = await AiStore.getInstance().requestExecution({
+        module: "idea_prompt",
+        functionName,
+        inputs,
+        actionName: actionKey,
+      });
+
+      callback(result);
+    } catch (err: any) {
+      console.error(err);
+      callback(`[Ошибка генерации: ${err.message || err.toString()}]`);
+    } finally {
+      setIsAiLoading(prev => ({ ...prev, [actionKey]: false }));
+    }
+  };
+
+  const addSuggestion = (title: string, content: string, type: 'idea' | 'prompt') => {
+    setState(s => ({
+      ...s,
+      aiSuggestions: [{ id: Date.now().toString(), title, content, type }, ...s.aiSuggestions]
+    }));
+  };
+
+  const improveIdea = () => runAiAction('Улучшить идею', 'Сделай идею глубже, распиши', res => setState(s => ({ ...s, ideaText: res })));
+  const makeIdeaCinematic = () => runAiAction('Сделать кинематографичнее', 'Добавь визуальных деталей, сделай кинематографично', res => setState(s => ({ ...s, ideaText: res })));
+  const expandIdeaToConcept = () => runAiAction('Развернуть в концепт', 'Напиши подробный концепт', res => setState(s => ({ ...s, ideaText: res })));
+  const generateSimilarIdeas = () => runAiAction('Предложить 5 похожих идей', 'Верни 5 альтернатив', res => setState(s => ({ ...s, ideaText: s.ideaText + '\n\nПохожие идеи:\n' + res })));
+  
+  const generateLogline = () => runAiAction('Создать логлайн', 'Напиши 1 короткое предложение', res => setState(s => ({ ...s, generatedLogline: res })));
+  const generateSynopsis = () => runAiAction('Создать синопсис', 'Напиши 3 абзаца синопсиса', res => setState(s => ({ ...s, generatedSynopsis: res })));
+  const generateMoodboard = () => {
+    runAiAction('Создать мудборд', 'Верни 5-7 визуальных тегов через запятую', res => {
+      const tags = res.split(',').map(t => t.trim()).filter(Boolean);
+      setState(s => ({ ...s, generatedMoodboard: tags.length > 0 ? tags : [res] }));
+    });
+  };
+
+  const buildFinalPrompt = () => {
+    const parts = [
+      `Название: ${state.ideaText ? "Проект" : "Без названия"}`,
+      `Основная идея: ${state.ideaText || "Не указана"}`,
+      `Жанр: ${state.selectedGenres.length > 0 ? state.selectedGenres.join(', ') : "Не указан"}`,
+      `Настроение: ${state.selectedMoods.length > 0 ? state.selectedMoods.join(', ') : "Не указано"}`,
+      `Эпоха: ${state.selectedEra || "Не указана"}`,
+      `Визуальный стиль: ${state.selectedVisualStyle || "Не указан"} | Камера: ${state.selectedCameraStyle || "Не указана"}`,
+      state.generatedLogline ? `Логлайн: ${state.generatedLogline}` : "",
+      state.generatedSynopsis ? `Синопсис: ${state.generatedSynopsis}` : "",
+      state.generatedMoodboard.length > 0 ? `Мудборд: ${state.generatedMoodboard.join(', ')}` : "",
+      state.uploadedAudioFile ? `Музыкальное/аудио направление: ${state.uploadedAudioFile.name}` : ""
+    ].filter(Boolean);
+    
+    setState(s => ({ ...s, finalPrompt: parts.join('\n\n') }));
+  };
+
+  const improveFinalPrompt = () => runAiAction('Улучшить финальный промпт', 'Сделай промпт идеальным для генерации', res => setState(s => ({ ...s, finalPrompt: res })));
+
+  const applySuggestion = (id: string, action: 'replace' | 'append') => {
+    const suggestion = state.aiSuggestions.find(s => s.id === id);
+    if (!suggestion) return;
+    
+    setState(s => {
+      if (suggestion.type === 'idea') {
+        return { 
+          ...s, 
+          ideaText: action === 'replace' ? suggestion.content : s.ideaText + '\n\nКонцепт: ' + suggestion.content,
+          aiSuggestions: s.aiSuggestions.filter(sug => sug.id !== id)
+        };
+      } else {
+        return {
+          ...s,
+          finalPrompt: action === 'replace' ? suggestion.content : s.finalPrompt + '\n\n' + suggestion.content,
+          aiSuggestions: s.aiSuggestions.filter(sug => sug.id !== id)
+        };
+      }
+    });
+  };
+
+  const dismissSuggestion = (id: string) => {
+    setState(s => ({ ...s, aiSuggestions: s.aiSuggestions.filter(sug => sug.id !== id) }));
+  };
+
+  const copyFinalPrompt = () => {
+    navigator.clipboard.writeText(state.finalPrompt);
+  };
+
+  return (
+    <div className="w-full min-h-[100vh] flex flex-col">
+      <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_320px] gap-6 w-full max-w-7xl mx-auto items-start">
+        {/* ЛЕВАЯ ЧАСТЬ: Единая Рабочая Область */}
+        <div className="h-auto min-h-0 overflow-visible pb-8 flex flex-col gap-6">
+          
+          <div className="bg-black/30 border border-[#00F0FF]/20 rounded-xl p-5 md:p-6 shadow-[0_0_20px_rgba(0,240,255,0.03)] flex flex-col gap-8 relative z-10 w-full">
+          <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-[#B026FF] to-[#00F0FF] opacity-50"></div>
+          
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-lg bg-[#00F0FF]/10 flex items-center justify-center border border-[#00F0FF]/30">
+              <Sparkles className="w-5 h-5 text-[#00F0FF]" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white tracking-tight">Рабочая область: Идея и Промпт</h1>
+              <p className="text-sm text-slate-400">Формирование основы истории, настройка визуального стиля и сборка промпта</p>
+            </div>
+          </div>
+
+          {/* 1. ИСТОЧНИКИ ИДЕИ */}
+          <div className="flex flex-col gap-4">
+            <h2 className="text-sm font-bold text-[#b026ff] uppercase tracking-widest flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#b026ff]"></span> 1. Источники Идеи
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {/* Аудио Upload */}
+              <div 
+                className={`border-2 border-dashed rounded-xl p-4 flex flex-col items-center justify-center text-center gap-3 transition-colors ${
+                  state.uploadedAudioFile 
+                    ? 'border-emerald-500/50 bg-emerald-500/5' 
+                    : 'border-slate-700 bg-black/40 hover:border-[#00F0FF]/50 hover:bg-[#00F0FF]/5'
+                }`}
+                onDragOver={e => e.preventDefault()}
+                onDrop={handleAudioDrop}
+              >
+                <input type="file" accept="audio/*" ref={fileInputRef} onChange={handleAudioSelect} className="hidden" />
+                
+                {state.uploadedAudioFile ? (
+                  <div className="flex flex-col items-center gap-2 w-full">
+                    <FileAudio className="w-8 h-8 text-emerald-400 mb-1" />
+                    <span className="text-xs font-semibold text-emerald-300 truncate w-full px-4">{state.uploadedAudioFile.name}</span>
+                    <div className="flex gap-2 mt-2">
+                      <button onClick={openAudioUpload} className="px-3 py-1.5 rounded bg-black/40 hover:bg-black/60 border border-slate-600 text-[10px] uppercase font-bold text-slate-300">Заменить</button>
+                      <button onClick={removeAudioFile} className="px-3 py-1.5 rounded bg-black/40 hover:bg-black/60 border border-red-500/30 text-[10px] uppercase font-bold text-red-400">Удалить</button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <Upload className="w-8 h-8 text-slate-500 mb-1" />
+                    <span className="text-xs font-medium text-slate-300 uppercase tracking-wide">Drag & Drop аудиофайла</span>
+                    <span className="text-[10px] text-slate-500">MP3 / WAV</span>
+                    <button onClick={openAudioUpload} className="mt-2 px-4 py-2 rounded-lg bg-[#00F0FF]/10 text-[#00F0FF] border border-[#00F0FF]/30 hover:bg-[#00F0FF]/25 hover:border-[#00F0FF]/60 text-[11px] uppercase font-bold tracking-widest transition-all">
+                      Выбрать аудиофайл
+                    </button>
+                  </>
+                )}
+                {state.validationErrors.audio && <p className="text-[10px] text-red-400">{state.validationErrors.audio}</p>}
+              </div>
+
+              {/* Текстовый реактор */}
+              <div className="flex flex-col gap-2 h-full">
+                <textarea 
+                  value={state.ideaText}
+                  onChange={e => updateIdeaText(e.target.value)}
+                  placeholder="Опишите идею, атмосферу, сюжет, сцену или референсы вручную..."
+                  className="w-full flex-1 bg-black/40 border border-slate-700 rounded-xl p-3 text-sm text-slate-200 outline-none focus:border-[#00F0FF]/50 transition-colors placeholder:text-slate-600 resize-none min-h-[140px] custom-scrollbar focus:shadow-[0_0_15px_rgba(0,240,255,0.1)]"
+                />
+                <div className="flex items-center justify-between px-1">
+                  <span className="text-[10px] text-slate-500">{state.ideaText.length} символов</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* 2. ПАРАМЕТРЫ ИДЕИ */}
+          <div className="flex flex-col gap-4">
+            <h2 className="text-sm font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 2. Параметры Идеи
+            </h2>
+            
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+              <MultiSelectorBlock title="Жанр" options={GENRES} selected={state.selectedGenres} onSelect={v => selectMultiParam('selectedGenres', v)} />
+              <MultiSelectorBlock title="Настроение" options={MOODS} selected={state.selectedMoods} onSelect={v => selectMultiParam('selectedMoods', v)} />
+              <SelectorBlock title="Эпоха" options={ERAS} selected={state.selectedEra} onSelect={v => selectParam('selectedEra', v)} />
+              <SelectorBlock title="Визуальный Стиль" options={VISUALS} selected={state.selectedVisualStyle} onSelect={v => selectParam('selectedVisualStyle', v)} />
+              <SelectorBlock title="Стиль Камеры" options={CAMERAS} selected={state.selectedCameraStyle} onSelect={v => selectParam('selectedCameraStyle', v)} />
+            </div>
+          </div>
+
+          {/* 3. ИИ-УЛУЧШЕНИЯ */}
+          <div className="flex flex-col gap-4">
+            <h2 className="text-sm font-bold text-amber-400 uppercase tracking-widest flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-amber-400"></span> 3. ИИ-Улучшения (по требованию)
+            </h2>
+            <div className="flex flex-wrap gap-2">
+              <AiActionButton icon={<Wand2 />} label="Улучшить идею" onClick={improveIdea} isLoading={isAiLoading['Улучшить идею']} disabled={!state.ideaText} />
+              <AiActionButton icon={<Film />} label="Сделать кинематографичнее" onClick={makeIdeaCinematic} isLoading={isAiLoading['Сделать кинематографичнее']} disabled={!state.ideaText} />
+              <AiActionButton icon={<Plus />} label="Развернуть в концепт" onClick={expandIdeaToConcept} isLoading={isAiLoading['Развернуть в концепт']} disabled={!state.ideaText} />
+              <AiActionButton icon={<RefreshCcw />} label="Предложить 5 похожих идей" onClick={generateSimilarIdeas} isLoading={isAiLoading['Предложить 5 похожих идей']} disabled={!state.ideaText} />
+            </div>
+          </div>
+
+          {/* 4. ЧЕРНОВИКИ */}
+          <div className="flex flex-col gap-4">
+            <h2 className="text-sm font-bold text-[#00F0FF] uppercase tracking-widest flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF]"></span> 4. Черновики Сценария
+            </h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <DraftField 
+                title="Логлайн (1 фраза)" 
+                value={state.generatedLogline} 
+                onChange={v => setState(s => ({ ...s, generatedLogline: v}))}
+                onGenerate={generateLogline}
+                isLoading={isAiLoading['Создать логлайн']}
+                generateLabel="Создать логлайн"
+              />
+              <DraftField 
+                title="Синопсис (3 абзаца)" 
+                value={state.generatedSynopsis} 
+                onChange={v => setState(s => ({ ...s, generatedSynopsis: v}))}
+                onGenerate={generateSynopsis}
+                isLoading={isAiLoading['Создать синопсис']}
+                generateLabel="Создать синопсис"
+                multiline
+              />
+            </div>
+            
+            <div className="bg-black/40 border border-slate-700/50 rounded-xl p-4 flex flex-col gap-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-slate-300 uppercase tracking-widest">Визуальный Мудборд</span>
+                <button 
+                  onClick={generateMoodboard}
+                  disabled={isAiLoading['Создать мудборд'] || !state.ideaText}
+                  className="px-3 py-1.5 rounded-lg bg-[#00F0FF]/10 text-[#00F0FF] border border-[#00F0FF]/30 hover:bg-[#00F0FF]/25 text-[10px] uppercase font-bold tracking-widest transition-all flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  {isAiLoading['Создать мудборд'] ? <Loader2 className="w-3 h-3 animate-spin"/> : <Layout className="w-3 h-3"/>}
+                  Создать мудборд
+                </button>
+              </div>
+              <div className="flex flex-wrap gap-2 min-h-[40px] items-start">
+                {state.generatedMoodboard.length > 0 ? state.generatedMoodboard.map((tag, i) => (
+                  <span key={i} className="px-2.5 py-1 rounded-md bg-slate-800 border border-slate-600 text-xs text-slate-300">{tag}</span>
+                )) : (
+                  <span className="text-xs text-slate-600 italic">Мудборд пока не сгенерирован...</span>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* 5. ФИНАЛЬНЫЙ ПРОМПТ */}
+          <div className="flex flex-col gap-4 mt-4 pt-6 border-t border-[var(--color-space-800)] relative">
+            <h2 className="text-base font-bold text-white uppercase tracking-widest flex items-center justify-between">
+              <span className="flex items-center gap-2 drop-shadow-[0_0_8px_rgba(255,255,255,0.5)]">
+                 <Terminal className="w-5 h-5 text-[#B026FF]" /> 5. Финальный Промпт
+              </span>
+            </h2>
+            
+            <div className="bg-black/60 border border-[#B026FF]/30 rounded-xl overflow-hidden shadow-[0_0_15px_rgba(176,38,255,0.1)]">
+              <div className="p-2 border-b border-slate-800 bg-black/40 flex flex-wrap gap-2 items-center justify-between">
+                <div className="flex gap-2">
+                  <button 
+                    onClick={buildFinalPrompt}
+                    className="px-3 py-1.5 md:py-2 md:px-4 rounded-lg bg-gradient-to-r from-[#B026FF]/20 to-[#00F0FF]/20 text-white border border-[#00F0FF]/40 hover:bg-[#00F0FF]/20 text-[10px] md:text-xs uppercase font-bold tracking-widest transition-all flex items-center gap-1.5"
+                  >
+                    <Layout className="w-3.5 h-3.5"/> Собрать из элементов
+                  </button>
+                  <button 
+                    onClick={improveFinalPrompt}
+                    disabled={!state.finalPrompt || isAiLoading['Улучшить финальный промпт']}
+                    className="px-3 py-1.5 md:py-2 md:px-4 rounded-lg bg-black/50 text-amber-400 border border-amber-500/30 hover:bg-amber-500/10 text-[10px] md:text-xs uppercase font-bold tracking-widest transition-all flex items-center gap-1.5 disabled:opacity-50"
+                  >
+                    {isAiLoading['Улучшить финальный промпт'] ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Sparkles className="w-3.5 h-3.5"/>} 
+                    Улучшить промпт (AI)
+                  </button>
+                </div>
+                <button 
+                  onClick={copyFinalPrompt}
+                  className="px-3 py-1.5 rounded-lg bg-black/50 text-slate-300 border border-slate-700 hover:text-white hover:border-slate-500 text-[10px] uppercase font-bold transition-all flex items-center gap-1.5"
+                >
+                  <Copy className="w-3.5 h-3.5"/> Скопировать
+                </button>
+              </div>
+              <textarea 
+                value={state.finalPrompt}
+                onChange={e => setState(s => ({ ...s, finalPrompt: e.target.value }))}
+                placeholder="Соберите промпт чтобы увидеть результат или введите его вручную..."
+                className="w-full bg-transparent p-4 text-sm font-mono text-slate-300 outline-none resize-none min-h-[200px] custom-scrollbar focus:bg-white/[0.02] transition-colors leading-relaxed"
+              />
+            </div>
+            
+            {/* Actions for next steps */}
+            <div className="flex flex-wrap gap-3 mt-2 justify-end">
+              <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--color-space-800)] border border-slate-600 text-sm font-bold text-slate-200 hover:bg-slate-700 transition-colors">
+                <Save className="w-4 h-4" /> Сохранить локально
+              </button>
+              <button 
+                onClick={onApprove}
+                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#B026FF] to-[#00F0FF] text-white font-bold text-sm shadow-[0_0_20px_rgba(0,240,255,0.4)] hover:shadow-[0_0_30px_rgba(0,240,255,0.6)] hover:scale-[1.02] transition-all"
+              >
+                Передать дальше <Forward className="w-4 h-4" />
+              </button>
+            </div>
+          </div>
+          
+        </div>
+      </div>
+
+        {/* ПРАВАЯ ЧАСТЬ: ИИ-Помощник (Вторичная панель) */}
+        <div className="w-full lg:sticky lg:top-4 bg-black/20 border border-[var(--color-space-800)] rounded-xl flex flex-col max-h-[calc(100vh-32px)] overflow-y-auto custom-scrollbar">
+        <div className="p-4 border-b border-[var(--color-space-800)] bg-black/40 flex items-center gap-2">
+          <Wand2 className="w-4 h-4 text-[#B026FF]" />
+          <h3 className="font-bold text-sm text-white uppercase tracking-widest">ИИ-Помощник</h3>
+        </div>
+        
+        <div className="flex-1 overflow-y-auto px-4 py-5 custom-scrollbar flex flex-col gap-6">
+          
+          <div className="space-y-3">
+            <h4 className="text-[10px] text-slate-500 uppercase font-bold tracking-widest border-b border-slate-800 pb-1">Текущий Контекст</h4>
+            <div className="text-xs text-slate-300 space-y-2 font-medium">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[9px] text-slate-500 uppercase">Медиа:</span>
+                <span className="truncate">{state.uploadedAudioFile ? state.uploadedAudioFile.name : '—'}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[9px] text-slate-500 uppercase">Жанр / Настроение / Эпоха:</span>
+                <span>{[...state.selectedGenres, ...state.selectedMoods, state.selectedEra].filter(Boolean).join(', ') || '—'}</span>
+              </div>
+              <div className="flex flex-col gap-0.5">
+                <span className="text-[9px] text-slate-500 uppercase">Логлайн:</span>
+                <span className="truncate">{state.generatedLogline || '—'}</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="space-y-3 flex-1 flex flex-col pt-4 sm:pt-0">
+            <h4 className="text-[10px] text-[#00F0FF] uppercase font-bold tracking-widest border-b border-slate-800 pb-1 drop-shadow-[0_0_5px_rgba(0,240,255,0.4)]">Предложения (AI)</h4>
+            <div className="flex flex-col gap-3 flex-1">
+              <AnimatePresence>
+                {state.aiSuggestions.length > 0 ? state.aiSuggestions.map((sug) => (
+                  <motion.div 
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 0.95 }}
+                    key={sug.id}
+                    className="flex flex-col text-xs bg-black/60 border border-[#00F0FF]/30 text-slate-300 p-3 rounded-lg flex-col gap-2 shadow-[0_0_15px_rgba(0,240,255,0.05)]"
+                  >
+                    <span className="font-bold text-[#00F0FF] text-[10px] uppercase block mb-1">{sug.title}</span>
+                    <p className="line-clamp-4 leading-relaxed opacity-90">{sug.content}</p>
+                    
+                    <div className="flex flex-wrap gap-1.5 mt-2">
+                       <button onClick={() => applySuggestion(sug.id, 'replace')} className="px-2 py-1 rounded bg-[#00F0FF]/10 text-[#00F0FF] hover:bg-[#00F0FF]/25 text-[9px] uppercase font-bold tracking-wider">
+                         Заменить
+                       </button>
+                       <button onClick={() => applySuggestion(sug.id, 'append')} className="px-2 py-1 rounded bg-slate-800 text-slate-300 hover:bg-slate-700 text-[9px] uppercase font-bold tracking-wider">
+                         Добавить
+                       </button>
+                       <button onClick={() => dismissSuggestion(sug.id)} className="px-2 py-1 rounded hover:bg-red-500/10 text-red-400 text-[9px] uppercase font-bold tracking-wider ml-auto">
+                         Сбросить
+                       </button>
+                    </div>
+                  </motion.div>
+                )) : (
+                  <div className="text-[10px] text-slate-500 italic text-center p-4 border border-dashed border-slate-800 rounded-lg">
+                    Пока нет предложений. Нажмите любую кнопку улучшений.
+                  </div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+        </div>
+        
+        <div className="p-3 border-t border-[var(--color-space-800)] bg-black/40">
+           <button className="w-full flex items-center justify-center gap-2 px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg text-xs font-bold transition-colors">
+              <MessageSquare className="w-3.5 h-3.5" /> Свободный запрос к ИИ
+           </button>
+        </div>
+      </div>
+    </div>
+    </div>
+  );
+}
+
+// Subcomponents
+function SelectorBlock({ title, options, selected, onSelect }: { title: string, options: string[], selected: string | null, onSelect: (v: string) => void }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{title}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map(opt => (
+          <button
+            key={opt}
+            onClick={() => onSelect(opt)}
+            className={`text-[10px] font-medium px-2.5 py-1.5 rounded-lg border transition-all ${
+              selected === opt 
+               ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.3)]'
+               : 'bg-black/30 border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-500'
+            }`}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MultiSelectorBlock({ title, options, selected, onSelect }: { title: string, options: string[], selected: string[], onSelect: (v: string) => void }) {
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-[10px] text-slate-400 font-bold uppercase tracking-widest">{title}</span>
+      <div className="flex flex-wrap gap-1.5">
+        {options.map(opt => (
+          <button
+            key={opt}
+            onClick={() => onSelect(opt)}
+            className={`text-[10px] font-medium px-2.5 py-1.5 rounded-lg border transition-all ${
+              selected.includes(opt) 
+               ? 'bg-emerald-500/20 border-emerald-500/60 text-emerald-400 shadow-[0_0_10px_rgba(52,211,153,0.3)]'
+               : 'bg-black/30 border-slate-700 text-slate-300 hover:bg-slate-800 hover:border-slate-500'
+            }`}
+          >
+            {opt}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function AiActionButton({ icon, label, onClick, isLoading, disabled }: { icon: React.ReactNode, label: string, onClick: () => void, isLoading?: boolean, disabled?: boolean }) {
+  return (
+    <button 
+      onClick={onClick}
+      disabled={isLoading || disabled}
+      className="flex items-center gap-1.5 px-3 py-1.5 md:py-2 rounded-lg bg-black/40 border border-slate-600 hover:border-amber-400/50 hover:bg-amber-400/10 text-slate-300 hover:text-amber-400 text-[10px] md:text-[11px] font-bold uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      {isLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : React.cloneElement(icon as React.ReactElement, { className: 'w-3.5 h-3.5' })}
+      {label}
+    </button>
+  );
+}
+
+function DraftField({ title, value, onChange, onGenerate, isLoading, generateLabel, multiline=false }: any) {
+  return (
+    <div className="bg-black/40 border border-slate-700/50 rounded-xl p-3 flex flex-col gap-2">
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{title}</span>
+        <button 
+          onClick={onGenerate}
+          disabled={isLoading}
+          className="px-2 py-1 rounded bg-black/60 border border-slate-600 hover:border-[#00F0FF]/50 hover:text-[#00F0FF] text-[9px] uppercase font-bold text-slate-400 transition-colors flex items-center gap-1 disabled:opacity-50"
+        >
+          {isLoading ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />} {generateLabel}
+        </button>
+      </div>
+      {multiline ? (
+        <textarea 
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder="Сгенерируйте или напишите текст..."
+          className="w-full bg-transparent border border-slate-800 rounded p-2 text-xs text-slate-300 outline-none focus:border-slate-500 resize-none h-24 custom-scrollbar"
+        />
+      ) : (
+        <input 
+          type="text"
+          value={value}
+          onChange={e => onChange(e.target.value)}
+          placeholder="Сгенерируйте или напишите текст..."
+          className="w-full bg-transparent border border-slate-800 rounded p-2 text-xs text-slate-300 outline-none focus:border-slate-500"
+        />
+      )}
+    </div>
+  )
+}

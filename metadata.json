@@ -1,0 +1,6 @@
+{
+  "name": "Aura AI Studio - Film Spec",
+  "description": "Interactive UX/UI Specification for an AI Video Production Platform (Idea to Export).",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
