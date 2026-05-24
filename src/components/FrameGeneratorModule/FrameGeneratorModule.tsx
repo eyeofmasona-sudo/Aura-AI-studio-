@@ -355,11 +355,29 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
       const newImages: GeneratedImage[] = [];
       const numVars = state.selectedVariationCount || 1;
       
+      const selectedStyle = state.selectedImageStyle || "Кинематографичный";
+      const englishStyle = selectedStyle === "Реализм" ? "photorealistic film scene" 
+                         : selectedStyle === "Кинематографичный" ? "epic dramatic cinematic wide shot film scene"
+                         : selectedStyle === "Анимационный" ? "anime series screenshot dynamic keyframe"
+                         : selectedStyle === "Концепт-арт" ? "stylized digital concept art illustration"
+                         : selectedStyle === "Комикс" ? "retro colored graphic novel comic panel"
+                         : selectedStyle === "Нуар" ? "black and white cinematic moody film noir scene"
+                         : selectedStyle === "Фэнтези" ? "magical illustration conceptual art scene"
+                         : selectedStyle === "Киберпанк" ? "neon lit cyberpunk street scene keyframe"
+                         : `${selectedStyle.toLowerCase()} styling, cinema shot scene`;
+
       for(let i=0; i<numVars; i++) {
+        const seedValue = Math.floor(Math.random() * 999999999).toString();
+        const cleanPrompt = `${englishStyle}, ${state.imagePrompt || "epic movie set background"}, cinematic lighting, detailed, 8k, aspect ratio 16:9`
+          .replace(/[^a-zA-Z0-9,\s\-]/g, "")
+          .substring(0, 320);
+
+        const imageUrl = `https://image.pollinations.ai/p/${encodeURIComponent(cleanPrompt)}?width=1024&height=1024&nologo=true&seed=${seedValue}`;
+
         newImages.push({
           id: Math.random().toString(),
-          url: "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=800&q=80",
-          prompt: state.imagePrompt,
+          url: imageUrl,
+          prompt: state.imagePrompt || "Сцена",
           frameType: type,
           sceneName: getSceneName(),
           chapterName: getChapterName()
@@ -393,9 +411,31 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
     setState(s => ({ ...s, isGenerating: true }));
     setTimeout(() => {
       const pairId = Math.random().toString();
+      const seed1 = Math.floor(Math.random() * 999999999).toString();
+      const seed2 = Math.floor(Math.random() * 999999999).toString();
+      const selectedStyle = state.selectedImageStyle || "Кинематографичный";
+
+      const englishStyle = selectedStyle === "Реализм" ? "photorealistic film scene" 
+                         : selectedStyle === "Кинематографичный" ? "epic dramatic cinematic wide shot film scene"
+                         : selectedStyle === "Анимационный" ? "anime series screenshot dynamic keyframe"
+                         : selectedStyle === "Концепт-арт" ? "stylized digital concept art illustration"
+                         : selectedStyle === "Комикс" ? "retro colored graphic novel comic panel"
+                         : selectedStyle === "Нуар" ? "black and white cinematic moody film noir scene"
+                         : selectedStyle === "Фэнтези" ? "magical illustration conceptual art scene"
+                         : selectedStyle === "Киберпанк" ? "neon lit cyberpunk street scene keyframe"
+                         : `${selectedStyle.toLowerCase()} styling, cinema shot scene`;
+
+      const cleanPromptFirst = `keyframe start of scene, ${englishStyle}, ${state.imagePrompt || "atmospheric start scene"}, cinematic lighting, detailed, 8k`
+        .replace(/[^a-zA-Z0-9,\s\-]/g, "")
+        .substring(0, 320);
+
+      const cleanPromptLast = `keyframe end of scene, dynamic climax, ${englishStyle}, ${state.imagePrompt || "atmospheric end scene"}, cinematic lighting, detailed, 8k`
+        .replace(/[^a-zA-Z0-9,\s\-]/g, "")
+        .substring(0, 320);
+
       const firstPairImg: GeneratedImage = {
         id: Math.random().toString(),
-        url: "https://images.unsplash.com/photo-1440407876804-c3dd509e5306?w=800&q=80",
+        url: `https://image.pollinations.ai/p/${encodeURIComponent(cleanPromptFirst)}?width=1024&height=1024&nologo=true&seed=${seed1}`,
         prompt: `[START OF SCENE] ${state.imagePrompt}`,
         frameType: 'anchor-pair',
         sceneName: getSceneName(),
@@ -405,7 +445,7 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
       };
       const lastPairImg: GeneratedImage = {
         id: Math.random().toString(),
-        url: "https://images.unsplash.com/photo-1481437642641-2f0ae875f836?w=800&q=80",
+        url: `https://image.pollinations.ai/p/${encodeURIComponent(cleanPromptLast)}?width=1024&height=1024&nologo=true&seed=${seed2}`,
         prompt: `[END OF SCENE] ${state.imagePrompt}`,
         frameType: 'anchor-pair',
         sceneName: getSceneName(),

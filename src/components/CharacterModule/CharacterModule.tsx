@@ -367,11 +367,22 @@ export function CharacterModule({ onApprove, isApproved }: { onApprove: () => vo
         actionName: `Генерация фото ${char.characterName}`
       });
 
-      // Map pseudo-deterministically to image matching user styling and gender
       const gender = getGenderForCharacter(char);
-      const portraitSet = gender === 'female' ? FEMALE_PORTRAITS : MALE_PORTRAITS;
-      const portraitIndex = generateHash(hashStr) % portraitSet.length;
-      const imageUrl = portraitSet[portraitIndex];
+      const englishStyle = char.selectedImageStyle === "Реализм" ? "photorealistic film portrait" 
+                         : char.selectedImageStyle === "Кинематографичный" ? "epic cinematic dramatic scene portrait"
+                         : char.selectedImageStyle === "Анимационный" ? "gorgeous anime animation portrait"
+                         : char.selectedImageStyle === "Концепт-арт" ? "stylized digital concept art portrait"
+                         : char.selectedImageStyle === "Комикс" ? "retro comic book drawing portrait"
+                         : char.selectedImageStyle === "Нуар" ? "black and white hypercontrast moody noir portrait"
+                         : char.selectedImageStyle === "Фэнтези" ? "magical mythical fantasy illustration portrait"
+                         : char.selectedImageStyle === "Киберпанк" ? "futuristic neon cyberpunk portrait"
+                         : `portrait, style of ${char.selectedImageStyle || "cinematic"}`;
+
+      const textForImage = `${englishStyle} of a ${gender === 'female' ? 'woman' : 'man'}, named ${char.characterName || 'actor'}, role: ${char.characterRole || 'person'}, ${char.appearanceDescription || ''}, wearing: ${char.outfitDescription || ''}, expression: ${char.selectedExpression || 'neutral'}`
+        .replace(/[^a-zA-Z0-9,\s\-]/g, "")
+        .substring(0, 320);
+
+      const imageUrl = `https://image.pollinations.ai/p/${encodeURIComponent(textForImage)}?width=1024&height=1024&nologo=true&seed=${seed}`;
 
       const newImageObj = {
         id: "img_" + Math.random().toString(36).substring(7),
@@ -520,7 +531,7 @@ export function CharacterModule({ onApprove, isApproved }: { onApprove: () => vo
                 >
                   <div className="w-8 h-8 rounded-full overflow-hidden shrink-0 border border-slate-700 bg-slate-900">
                     {selectedImgObj ? (
-                      <img src={selectedImgObj.url} alt="Profile" className="w-full h-full object-cover" />
+                      <img src={selectedImgObj.url} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                     ) : (
                       <div className="w-full h-full flex items-center justify-center text-slate-500 font-bold text-xs"><User className="w-4 h-4" /></div>
                     )}
@@ -886,7 +897,7 @@ export function CharacterModule({ onApprove, isApproved }: { onApprove: () => vo
                                 isKey ? 'border-[#00F0FF]' : 'border-slate-800 hover:border-slate-700'
                               }`}
                             >
-                              <img src={img.url} alt="Variant" className="w-full h-full object-cover" />
+                              <img src={img.url} alt="Variant" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                               <div className="absolute inset-x-0 bottom-0 bg-black/60 p-1 text-[8px] opacity-0 group-hover:opacity-100 transition-opacity truncate">{img.prompt}</div>
                               {isKey && (
                                 <div className="absolute top-1 right-1 bg-[#00F0FF] text-black p-0.5 rounded-full"><CheckCircle2 className="w-3.5 h-3.5" /></div>
