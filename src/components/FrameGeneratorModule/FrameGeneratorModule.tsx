@@ -544,22 +544,50 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
   const getChapterName = () => state.chapters.find(c => c.id === state.selectedChapterId)?.title || "Unknown Chapter";
 
   const generateWithParams = async (type: 'standard' | 'first-frame' | 'last-frame' | 'nano-banana') => {
-    if (!state.imagePrompt.trim()) {
-      alert("Сначала соберите Image Prompt (кнопка «Собрать Image Prompt»)!");
-      return;
-    }
     setState(s => ({ ...s, isGenerating: true }));
 
     try {
       const numVars = state.selectedVariationCount || 1;
 
-      // Map frameType → cinematic prefix for image generation prompt
+      // Type-specific prefix — prepended to prompt
       const typePrefix: Record<string, string> = {
-        'first-frame': 'Cinematic first frame of scene, opening moment, establishing shot.',
-        'last-frame': 'Cinematic last frame of scene, peak emotional moment, scene resolution.',
-        'nano-banana': 'Ultra-detailed cinematic keyframe, maximum visual quality.',
-        'standard': 'Cinematic film still, key moment.',
+        'first-frame': 'Cinematic FIRST FRAME of scene. Scene opening, establishing shot, beginning of action.',
+        'last-frame':  'Cinematic LAST FRAME of scene. Peak emotional moment, scene climax or resolution.',
+        'nano-banana': 'Ultra-detailed cinematic keyframe, maximum visual fidelity, hyperrealistic.',
+        'standard':    'Cinematic film still, key moment of scene.',
       };
+
+      // Auto-build a base prompt if field is empty
+      let basePrompt = state.imagePrompt.trim();
+      if (!basePrompt) {
+        const scene = state.scenes.find(s => s.id === state.selectedSceneId);
+        const chapter = state.chapters.find(c => c.id === state.selectedChapterId);
+        const frame = state.frames.find(f => f.id === state.selectedFrameId);
+        basePrompt = [
+          frame?.action || scene?.description || scene?.title || chapter?.summary || 'Cinematic scene',
+          scene?.location ? `Location: ${scene.location}.` : '',
+          scene?.visualStyleHint ? `Style: ${scene.visualStyleHint}.` : '',
+          frame?.characters ? `Characters: ${frame.characters}.` : '',
+        ].filter(Boolean).join(' ');
+      }
+
+      // Build the full prompt shown to user
+      const techParams = [
+        state.selectedShotType       ? `Shot: ${state.selectedShotType}.`           : '',
+        state.selectedCameraAngle    ? `Angle: ${state.selectedCameraAngle}.`        : '',
+        state.selectedCameraMovement ? `Movement: ${state.selectedCameraMovement}.`  : '',
+        state.selectedLighting       ? `Lighting: ${state.selectedLighting}.`        : '',
+        state.selectedVisualStyle    ? `Style: ${state.selectedVisualStyle}.`         : '',
+        state.selectedRealismLevel   ? `Realism: ${state.selectedRealismLevel}.`      : '',
+        state.selectedColorPalette   ? `Color: ${state.selectedColorPalette}.`        : '',
+        'ARRI Alexa 4K, film grain, professional cinematography.',
+        state.negativePrompt ? `Avoid: ${state.negativePrompt}.` : 'No text, no watermarks.',
+      ].filter(Boolean).join(' ');
+
+      const fullPrompt = `${typePrefix[type]} ${basePrompt} ${techParams}`.trim();
+
+      // Show the assembled prompt to user immediately
+      updateField('imagePrompt', `[${type.toUpperCase()}] ${basePrompt}`);
 
       const aspectRatioMap: Record<string, '16:9' | '9:16' | '1:1' | '4:3' | '3:4'> = {
         '16:9': '16:9', '9:16': '9:16', '1:1': '1:1', '4:3': '4:3', '3:4': '3:4'
@@ -569,20 +597,6 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
       const newImages: GeneratedImage[] = [];
 
       for (let i = 0; i < numVars; i++) {
-        const fullPrompt = [
-          typePrefix[type],
-          state.imagePrompt,
-          state.selectedShotType ? `Shot type: ${state.selectedShotType}.` : '',
-          state.selectedCameraAngle ? `Camera angle: ${state.selectedCameraAngle}.` : '',
-          state.selectedCameraMovement ? `Camera movement: ${state.selectedCameraMovement}.` : '',
-          state.selectedLighting ? `Lighting: ${state.selectedLighting}.` : '',
-          state.selectedVisualStyle ? `Visual style: ${state.selectedVisualStyle}.` : '',
-          state.selectedRealismLevel ? `Realism: ${state.selectedRealismLevel}.` : '',
-          state.selectedColorPalette ? `Color palette: ${state.selectedColorPalette}.` : '',
-          'ARRI Alexa 4K, film grain, professional cinematography.',
-          state.negativePrompt ? `Avoid: ${state.negativePrompt}.` : 'No text, no watermarks, no CGI artifacts.',
-        ].filter(Boolean).join(' ');
-
         const res = await fetch('/api/generate/image', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -590,20 +604,20 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
         });
 
         if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error || `Image API error ${res.status}`);
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || `Image API error ${res.status}`);
         }
 
         const data = await res.json();
         const imgData = data.images?.[0];
-        if (!imgData?.imageBase64) throw new Error('No image data returned');
+        if (!imgData?.imageBase64) throw new Error('No image data returned from API');
 
         const dataUrl = `data:${imgData.mimeType ?? 'image/jpeg'};base64,${imgData.imageBase64}`;
 
         newImages.push({
           id: Math.random().toString(36).substr(2, 9),
           url: dataUrl,
-          prompt: state.imagePrompt,
+          prompt: fullPrompt,
           frameType: type,
           sceneName: getSceneName(),
           chapterName: getChapterName(),
@@ -612,33 +626,42 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
 
       setState(s => {
         let firstFrameId = s.selectedFirstFrameId;
-        let lastFrameId = s.selectedLastFrameId;
+        let lastFrameId  = s.selectedLastFrameId;
         if (type === 'first-frame' && newImages.length > 0) firstFrameId = newImages[0].id;
-        if (type === 'last-frame' && newImages.length > 0) lastFrameId = newImages[0].id;
+        if (type === 'last-frame'  && newImages.length > 0) lastFrameId  = newImages[0].id;
         return {
           ...s,
           generatedFrameImages: [...newImages, ...s.generatedFrameImages],
-          selectedFrameImage: newImages[0]?.id ?? s.selectedFrameImage,
+          selectedFrameImage:   newImages[0]?.id ?? s.selectedFrameImage,
           selectedFirstFrameId: firstFrameId,
-          selectedLastFrameId: lastFrameId,
+          selectedLastFrameId:  lastFrameId,
           isGenerating: false,
         };
       });
     } catch (err: any) {
       console.error('generateWithParams failed:', err);
       setState(s => ({ ...s, isGenerating: false }));
-      alert(`Ошибка генерации кадра: ${err.message}`);
+      alert(`Ошибка генерации: ${err.message}`);
     }
   };
 
   const generateFirstLastPair = async () => {
-    if (!state.imagePrompt.trim()) {
-      alert("Сначала соберите Image Prompt!");
-      return;
-    }
     setState(s => ({ ...s, isGenerating: true }));
 
     try {
+      // Auto-build base prompt if empty
+      let basePrompt = state.imagePrompt.trim();
+      if (!basePrompt) {
+        const scene = state.scenes.find(s => s.id === state.selectedSceneId);
+        const chapter = state.chapters.find(c => c.id === state.selectedChapterId);
+        const frame = state.frames.find(f => f.id === state.selectedFrameId);
+        basePrompt = [
+          frame?.action || scene?.description || scene?.title || chapter?.summary || 'Cinematic scene',
+          scene?.location ? `Location: ${scene.location}.` : '',
+          scene?.visualStyleHint ? `Style: ${scene.visualStyleHint}.` : '',
+        ].filter(Boolean).join(' ');
+      }
+
       const aspectRatioMap: Record<string, '16:9' | '9:16' | '1:1' | '4:3' | '3:4'> = {
         '16:9': '16:9', '9:16': '9:16', '1:1': '1:1', '4:3': '4:3', '3:4': '3:4'
       };
@@ -654,8 +677,11 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
         state.negativePrompt ? `Avoid: ${state.negativePrompt}.` : 'No text, no watermarks.',
       ].filter(Boolean).join(' ');
 
-      const firstPrompt = `Cinematic first frame, scene opening, establishing moment. ${state.imagePrompt} ${techSuffix}`;
-      const lastPrompt  = `Cinematic last frame, peak emotional climax, scene resolution. ${state.imagePrompt} ${techSuffix}`;
+      const firstPrompt = `Cinematic FIRST FRAME, scene opening, establishing moment, beginning of action. ${basePrompt} ${techSuffix}`;
+      const lastPrompt  = `Cinematic LAST FRAME, peak emotional climax, scene resolution, final image. ${basePrompt} ${techSuffix}`;
+
+      // Show assembled prompts in UI
+      updateField('imagePrompt', `[PAIR] ${basePrompt}`);
 
       const [resFirst, resLast] = await Promise.all([
         fetch('/api/generate/image', {
@@ -668,18 +694,26 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
         }),
       ]);
 
-      if (!resFirst.ok || !resLast.ok) throw new Error('Image generation failed for pair');
+      if (!resFirst.ok || !resLast.ok) {
+        const errFirst = !resFirst.ok ? await resFirst.json().catch(() => ({})) : {};
+        const errLast  = !resLast.ok  ? await resLast.json().catch(() => ({}))  : {};
+        throw new Error(errFirst.error || errLast.error || 'Image generation failed for pair');
+      }
 
       const [dataFirst, dataLast] = await Promise.all([resFirst.json(), resLast.json()]);
 
-      const toDataUrl = (d: any) => `data:${d.images?.[0]?.mimeType ?? 'image/jpeg'};base64,${d.images?.[0]?.imageBase64}`;
+      const toDataUrl = (d: any) => {
+        const img = d.images?.[0];
+        if (!img?.imageBase64) throw new Error('No image data in response');
+        return `data:${img.mimeType ?? 'image/jpeg'};base64,${img.imageBase64}`;
+      };
 
       const pairId = Math.random().toString(36).substr(2, 9);
 
       const firstPairImg: GeneratedImage = {
         id: Math.random().toString(36).substr(2, 9),
         url: toDataUrl(dataFirst),
-        prompt: `[FIRST FRAME] ${state.imagePrompt}`,
+        prompt: `[FIRST FRAME] ${basePrompt}`,
         frameType: 'anchor-pair',
         sceneName: getSceneName(),
         chapterName: getChapterName(),
@@ -689,7 +723,7 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
       const lastPairImg: GeneratedImage = {
         id: Math.random().toString(36).substr(2, 9),
         url: toDataUrl(dataLast),
-        prompt: `[LAST FRAME] ${state.imagePrompt}`,
+        prompt: `[LAST FRAME] ${basePrompt}`,
         frameType: 'anchor-pair',
         sceneName: getSceneName(),
         chapterName: getChapterName(),
@@ -1059,28 +1093,30 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
               <div className="flex gap-4 flex-wrap">
                 <button 
                   onClick={() => generateWithParams('standard')} 
-                  disabled={state.isGenerating || !state.imagePrompt.trim()}
+                  disabled={state.isGenerating}
                   className="px-6 py-3 rounded-xl bg-slate-800 text-slate-100 hover:bg-slate-700 transition-all font-bold uppercase tracking-wider text-xs border border-slate-600 disabled:opacity-50"
                 >
                   Сгенерировать Кадр
                 </button>
                 <button 
                   onClick={() => generateWithParams('first-frame')} 
-                  disabled={state.isGenerating || !state.imagePrompt.trim()}
+                  disabled={state.isGenerating}
+                  title="Генерирует первый кадр сцены. Промпт обновится автоматически."
                   className="px-6 py-3 rounded-xl bg-indigo-900/40 text-indigo-300 hover:bg-indigo-800/60 transition-all font-bold uppercase tracking-wider text-xs border border-indigo-500/50 flex gap-2 items-center disabled:opacity-50"
                 >
                   <Anchor className="w-4 h-4" /> First Frame
                 </button>
                 <button 
                   onClick={() => generateWithParams('last-frame')} 
-                  disabled={state.isGenerating || !state.imagePrompt.trim()}
+                  disabled={state.isGenerating}
+                  title="Генерирует последний кадр сцены. Промпт обновится автоматически."
                   className="px-6 py-3 rounded-xl bg-indigo-900/40 text-indigo-300 hover:bg-indigo-800/60 transition-all font-bold uppercase tracking-wider text-xs border border-indigo-500/50 flex gap-2 items-center disabled:opacity-50"
                 >
                   <Anchor className="w-4 h-4" /> Last Frame
                 </button>
                 <button 
                   onClick={handleGenerationMenu} 
-                  disabled={state.isGenerating || !state.imagePrompt.trim()}
+                  disabled={state.isGenerating}
                   className="px-6 py-3 rounded-xl bg-[#00F0FF] text-black hover:bg-[#4dffff] transition-all font-bold uppercase tracking-wider text-xs shadow-[0_0_15px_rgba(0,240,255,0.3)] disabled:opacity-50 flex items-center gap-2"
                 >
                   {state.isGenerating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Camera className="w-4 h-4" />}

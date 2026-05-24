@@ -12,7 +12,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateImages({
-      model: 'gemini-2.5-flash-preview-05-20',
+      model: 'imagen-3.0-generate-002',
       prompt,
       config: { numberOfImages, aspectRatio, outputMimeType: 'image/jpeg' },
     });

@@ -192,7 +192,7 @@ CRITICAL RULES:
       if (!prompt) return res.status(400).json({ error: "prompt is required" });
 
       const response = await ai.models.generateImages({
-        model: "gemini-2.5-flash-preview-05-20",
+        model: "imagen-3.0-generate-002",
         prompt,
         config: { numberOfImages, aspectRatio, outputMimeType: "image/jpeg" },
       });
@@ -274,7 +274,7 @@ CRITICAL RULES:
   app.get("/api/capabilities", (_req, res) => {
     res.json({
       video: { model: "veo-3.1-lite-generate-preview", enabled: !!effectiveApiKey },
-      image: { model: "gemini-2.5-flash-preview-05-20", enabled: !!effectiveApiKey },
+      image: { model: "imagen-3.0-generate-002", enabled: !!effectiveApiKey },
       tts:   { model: "gemini-2.5-flash-preview-tts", enabled: !!effectiveApiKey },
       music: { model: "lyria-3-pro-preview", enabled: !!effectiveApiKey },
     });
