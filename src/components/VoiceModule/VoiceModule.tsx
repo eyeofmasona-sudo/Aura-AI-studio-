@@ -334,12 +334,19 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
       return;
     }
 
-    const apiKey = localStorage.getItem('google_tts_api_key') || prompt('Введите Google Cloud TTS API ключ:');
+    const envApiKey = import.meta.env.VITE_GOOGLE_CLOUD_TTS_API_KEY as string;
+    const savedApiKey = localStorage.getItem('google_tts_api_key');
+    const userProvidedKey = prompt('Введите Google Cloud TTS API ключ (или оставьте пусто для использования системного):');
+
+    const apiKey = userProvidedKey?.trim() || envApiKey || savedApiKey;
     if (!apiKey) {
-      alert("API ключ не предоставлен!");
+      alert("API ключ не найден! Пожалуйста, установите GOOGLE_CLOUD_TTS_API_KEY или введите ключ.");
       return;
     }
-    localStorage.setItem('google_tts_api_key', apiKey);
+
+    if (userProvidedKey?.trim()) {
+      localStorage.setItem('google_tts_api_key', userProvidedKey.trim());
+    }
 
     updateState({ isGenerating: true });
 
