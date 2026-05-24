@@ -327,24 +327,95 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
     }
   };
 
-  // 5. Генерация TTS
-  const generateTtsIfSupported = () => {
+  // 5. Генерация TTS через Google Cloud
+  const generateTtsIfSupported = async () => {
     if (!state.voiceText && state.voiceLines.length === 0 && !state.ssmlText) {
       alert("Нет текста или SSML для генерации!");
       return;
     }
+
+    const apiKey = localStorage.getItem('google_tts_api_key') || prompt('Введите Google Cloud TTS API ключ:');
+    if (!apiKey) {
+      alert("API ключ не предоставлен!");
+      return;
+    }
+    localStorage.setItem('google_tts_api_key', apiKey);
+
     updateState({ isGenerating: true });
-    
-    setTimeout(() => {
-      // Mock generation
+
+    try {
+      const textToSynthesize = state.ssmlText || state.voiceText || state.voiceLines.map(l => l.text).join(' ');
+
+      const voiceGenderMap: Record<string, string> = {
+        'мужской': 'MALE',
+        'женский': 'FEMALE',
+        'нейтральный': 'NEUTRAL',
+        'детский': 'MALE',
+        'пожилой': 'MALE',
+        'персонажный': 'MALE',
+        'дикторский': 'NEUTRAL'
+      };
+
+      const pitchMap: Record<string, number> = {
+        'низкая': -10,
+        'средняя': 0,
+        'высокая': 10
+      };
+
+      const speedMap: Record<string, number> = {
+        'медленно': 0.7,
+        'нормально': 1.0,
+        'быстро': 1.3,
+        'custom': parseFloat(state.customSpeed) || 1.0
+      };
+
+      const requestBody = {
+        input: state.ssmlText ? { ssml: textToSynthesize } : { text: textToSynthesize },
+        voice: {
+          languageCode: 'ru-RU',
+          name: 'ru-RU-Studio-A',
+          ssmlGender: voiceGenderMap[state.selectedVoiceType || 'мужской']
+        },
+        audioConfig: {
+          audioEncoding: 'MP3',
+          pitch: pitchMap[state.selectedPitch || 'средняя'],
+          speakingRate: speedMap[state.selectedSpeed || 'нормально'],
+          volumeGainDb: 0
+        }
+      };
+
+      const response = await fetch(
+        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Google Cloud TTS ошибка: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      const audioContent = data.audioContent;
+
+      if (!audioContent) {
+        throw new Error('Нет аудиоконтента в ответе');
+      }
+
+      const audioBlob = new Blob([Uint8Array.from(atob(audioContent), c => c.charCodeAt(0))], { type: 'audio/mpeg' });
+      const audioUrl = URL.createObjectURL(audioBlob);
+
       const freshAudio: GeneratedVoiceAudioItem = {
         id: `tts-${Date.now()}`,
         textRef: state.voiceLines.length > 0 ? state.voiceLines[0].text.substring(0, 30) + "..." : "Полный скрипт",
-        voiceModel: TTS_MODELS.find(m => m.id === state.selectedTtsModel)?.label || "ElevenLabs",
-        url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+        voiceModel: 'Google Cloud TTS (Русский)',
+        url: audioUrl,
         duration: "0:25",
         createdAt: new Date().toLocaleTimeString()
       };
+
       setState(prev => {
         const u = {
           ...prev,
@@ -355,8 +426,13 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
         saveGameState(u);
         return u;
       });
-      alert("Вокальный трек сгенерирован!");
-    }, 2500);
+
+      alert("Голос успешно сгенерирован!");
+    } catch (error) {
+      console.error("TTS ошибка:", error);
+      alert(`Ошибка при генерации голоса: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
+      updateState({ isGenerating: false });
+    }
   };
 
   const selectGeneratedVoiceAudio = (audioId: string) => {
