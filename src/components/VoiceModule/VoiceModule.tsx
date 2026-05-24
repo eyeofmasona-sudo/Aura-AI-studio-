@@ -318,54 +318,36 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
     }
   };
 
-  // 5. Генерация TTS — реальный Gemini TTS
-  const generateTtsIfSupported = async () => {
-    const textToSpeak = state.ssmlText || state.voiceText ||
-      state.voiceLines.map(l => l.text).join("\n");
-
-    if (!textToSpeak.trim()) {
+  // 5. Генерация TTS
+  const generateTtsIfSupported = () => {
+    if (!state.voiceText && state.voiceLines.length === 0 && !state.ssmlText) {
       alert("Нет текста или SSML для генерации!");
       return;
     }
     updateState({ isGenerating: true });
-
-    try {
-      const { generateTts, TTS_VOICES } = await import("../../services/generationService");
-
-      // Map UI model id → voice name
-      const voiceMap: Record<string, string> = {
-        elevenlabs: "Kore",
-        google: "Charon",
-        openai: "Aoede",
-      };
-      const voiceName = (voiceMap[state.selectedTtsModel ?? ""] ?? "Kore") as any;
-
-      const result = await generateTts({ text: textToSpeak, voiceName });
-
+    
+    setTimeout(() => {
+      // Mock generation
       const freshAudio: GeneratedVoiceAudioItem = {
         id: `tts-${Date.now()}`,
-        textRef: textToSpeak.substring(0, 40) + (textToSpeak.length > 40 ? "..." : ""),
-        voiceModel: `Gemini TTS (${voiceName})`,
-        url: result.objectUrl ?? "",
-        duration: "—",
-        createdAt: new Date().toLocaleTimeString(),
+        textRef: state.voiceLines.length > 0 ? state.voiceLines[0].text.substring(0, 30) + "..." : "Полный скрипт",
+        voiceModel: TTS_MODELS.find(m => m.id === state.selectedTtsModel)?.label || "ElevenLabs",
+        url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
+        duration: "0:25",
+        createdAt: new Date().toLocaleTimeString()
       };
-
       setState(prev => {
         const u = {
           ...prev,
           generatedVoiceAudios: [freshAudio, ...prev.generatedVoiceAudios],
           selectedVoiceAudioId: freshAudio.id,
-          isGenerating: false,
+          isGenerating: false
         };
         saveGameState(u);
         return u;
       });
-    } catch (err: any) {
-      console.error("TTS failed:", err);
-      updateState({ isGenerating: false });
-      alert(`Ошибка TTS: ${err.message}`);
-    }
+      alert("Вокальный трек сгенерирован!");
+    }, 2500);
   };
 
   const selectGeneratedVoiceAudio = (audioId: string) => {

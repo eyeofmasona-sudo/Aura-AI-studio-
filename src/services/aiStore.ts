@@ -8,6 +8,7 @@ export type AiTaskType =
   | "video_generation"
   | "audio_understanding"
   | "tts"
+  | "music"
   | "consistency_check"
   | "prompt_improvement"
   | "metadata";
@@ -47,6 +48,7 @@ export const aiFunctionRegistry: RegistryFunction[] = [
   { module: "characters", functionName: "verifyPhotoDesc", label: "Проверить соответствие фото и описания", taskType: "text_strong", defaultCostLevel: "high", requiresConfirmation: true },
   { module: "characters", functionName: "generateCharacterByText", label: "Сгенерировать персонажа по тексту", taskType: "image_generation", defaultCostLevel: "high", requiresConfirmation: true },
   { module: "characters", functionName: "generateCharacterByPhoto", label: "Сгенерировать по фото + описанию", taskType: "image_generation", defaultCostLevel: "high", requiresConfirmation: true },
+  { module: "characters", functionName: "generateCharactersFromIdea", label: "Создать персонажей из идеи", taskType: "text_balanced", defaultCostLevel: "medium", requiresConfirmation: false },
 
   // 3. Сценарий и Главы
   { module: "scenario", functionName: "splitIdeaIntoChapters", label: "Разбить идею на главы", taskType: "text_balanced", defaultCostLevel: "medium", requiresConfirmation: false },
@@ -96,8 +98,8 @@ export const aiFunctionRegistry: RegistryFunction[] = [
   { module: "music", functionName: "chooseInstruments", label: "Подобрать инструменты", taskType: "text_cheap", defaultCostLevel: "low", requiresConfirmation: false },
   { module: "music", functionName: "chooseBmp", label: "Подобрать BPM", taskType: "text_cheap", defaultCostLevel: "low", requiresConfirmation: false },
   { module: "music", functionName: "makeMusicCinematic", label: "Сделать музыку кинематографичнее", taskType: "text_cheap", defaultCostLevel: "low", requiresConfirmation: false },
-  { module: "music", functionName: "makeMusicForScene", label: "Сделать музыку под сцену", taskType: "text_balanced", defaultCostLevel: "medium", requiresConfirmation: false },
-  { module: "music", functionName: "createMusicPrompt", label: "Создать music prompt", taskType: "text_balanced", defaultCostLevel: "medium", requiresConfirmation: false },
+  { module: "music", functionName: "makeMusicForScene", label: "Сделать музыку под сцену", taskType: "music", defaultCostLevel: "medium", requiresConfirmation: false },
+  { module: "music", functionName: "createMusicPrompt", label: "Создать music prompt", taskType: "music", defaultCostLevel: "medium", requiresConfirmation: false },
   { module: "music", functionName: "createAudioDirection", label: "Создать audio direction", taskType: "text_cheap", defaultCostLevel: "low", requiresConfirmation: false },
   { module: "music", functionName: "createSfxList", label: "Создать SFX list", taskType: "text_cheap", defaultCostLevel: "low", requiresConfirmation: false },
   { module: "music", functionName: "analyzeAudioReference", label: "Анализ audio reference", taskType: "audio_understanding", defaultCostLevel: "high", requiresConfirmation: true },
@@ -184,6 +186,7 @@ export const modelPricingConfig: Record<string, ModelPricing> = {
   "veo-3.1-generate-preview": { inputCostPerMillion: 0, outputCostPerMillion: 0, fixedCostPerRun: 0.25 },
   "gemini-3.1-flash-tts-preview": { inputCostPerMillion: 0, outputCostPerMillion: 0, fixedCostPerRun: 0.01 },
   "gemini-3.1-flash-live-preview": { inputCostPerMillion: 0.10, outputCostPerMillion: 0.40 },
+  "lyria-3-pro-preview": { inputCostPerMillion: 0, outputCostPerMillion: 0, fixedCostPerRun: 0.10 },
   "default-fallback": { inputCostPerMillion: 0.075, outputCostPerMillion: 0.30 },
 };
 
@@ -217,6 +220,10 @@ export const MODEL_OPTIONS = {
     { value: "gemini-3.1-flash-tts-preview", label: "Gemini 3.1 TTS (Рекомендуется)" },
     { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash (Альтернатива)" }
   ],
+  music: [
+    { value: "lyria-3-pro-preview", label: "Lyria 3 Pro Preview (Рекомендуется для музыки)" },
+    { value: "gemini-3.1-flash-live-preview", label: "Gemini 3.1 Live Audio (Альтернатива)" }
+  ],
   default_fallback: [
     { value: "gemini-3.5-flash", label: "Gemini 3.5 Flash" },
     { value: "gemini-3.1-pro-preview", label: "Gemini 3.1 Pro Preview" }
@@ -233,6 +240,7 @@ const DEFAULT_TASK_TYPE_MODELS: TaskTypeModelsMap = {
   video_generation: "veo-3.1-lite-generate-preview",
   audio_understanding: "gemini-3.1-flash-live-preview",
   tts: "gemini-3.1-flash-tts-preview",
+  music: "lyria-3-pro-preview",
   consistency_check: "gemini-3.1-pro-preview",
   prompt_improvement: "gemini-3.5-flash",
   metadata: "gemini-3.5-flash",

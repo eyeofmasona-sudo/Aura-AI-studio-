@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { generateVideo, generateImage, base64ToDataUrl } from '../../services/generationService';
 import { 
   Upload, User, X, Sparkles, Wand2, Copy, 
   Save, Forward, Loader2, Edit3,
@@ -481,56 +480,34 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
     return pool[idx];
   };
 
-  // Handler: generateFirstFrameImage — real Gemini 2.5 Flash Image
-  const generateFirstFrameImage = async (blockId: string) => {
+  // Handler: generateFirstFrameImage
+  const generateFirstFrameImage = (blockId: string) => {
     const block = state.sceneVideoBlocks.find(b => b.id === blockId);
     if (!block) return;
-
+    
     updateBlock(blockId, { generationStatus: "generating" });
-    try {
-      const prompt = [
-        "Cinematic first frame. Film still.",
-        block.sceneTitle,
-        block.sceneDescription,
-        block.location ? `Location: ${block.location}` : "",
-        block.mood ? `Mood: ${block.mood}` : "",
-        block.visualStyleHint ? `Visual style: ${block.visualStyleHint}` : "",
-        "High quality, 4K, dramatic lighting.",
-      ].filter(Boolean).join(". ");
-
-      const images = await generateImage({ prompt, aspectRatio: "16:9" });
-      const dataUrl = images[0]?.dataUrl ?? null;
-      updateBlock(blockId, { firstFrameImage: dataUrl, generationStatus: "idle" });
-    } catch (err: any) {
-      console.error("First frame generation failed:", err);
-      updateBlock(blockId, { generationStatus: "error", validationErrors: { firstFrame: err.message } });
-    }
+    setTimeout(() => {
+      const generatedUrl = pickRandomUnsplash(block.location);
+      updateBlock(blockId, { 
+        firstFrameImage: generatedUrl,
+        generationStatus: "idle"
+      });
+    }, 1200);
   };
 
-  // Handler: generateLastFrameImage — real Gemini 2.5 Flash Image
-  const generateLastFrameImage = async (blockId: string) => {
+  // Handler: generateLastFrameImage
+  const generateLastFrameImage = (blockId: string) => {
     const block = state.sceneVideoBlocks.find(b => b.id === blockId);
     if (!block) return;
-
+    
     updateBlock(blockId, { generationStatus: "generating" });
-    try {
-      const prompt = [
-        "Cinematic last frame. Film still. Scene ending.",
-        block.sceneTitle,
-        block.sceneDescription,
-        block.location ? `Location: ${block.location}` : "",
-        block.mood ? `Mood: ${block.mood}` : "",
-        block.visualStyleHint ? `Visual style: ${block.visualStyleHint}` : "",
-        "Dramatic conclusion, high quality, 4K.",
-      ].filter(Boolean).join(". ");
-
-      const images = await generateImage({ prompt, aspectRatio: "16:9" });
-      const dataUrl = images[0]?.dataUrl ?? null;
-      updateBlock(blockId, { lastFrameImage: dataUrl, generationStatus: "idle" });
-    } catch (err: any) {
-      console.error("Last frame generation failed:", err);
-      updateBlock(blockId, { generationStatus: "error", validationErrors: { lastFrame: err.message } });
-    }
+    setTimeout(() => {
+      const generatedUrl = pickRandomUnsplash(block.location);
+      updateBlock(blockId, { 
+        lastFrameImage: generatedUrl,
+        generationStatus: "idle"
+      });
+    }, 1200);
   };
 
   // Handler: updateScenePrompt
@@ -587,72 +564,37 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
     updateBlock(blockId, { motionPrompt: value });
   };
 
-  // Handler: generateSceneVideo — real Veo 3.1 Lite
-  const generateSceneVideo = async (blockId: string) => {
+  // Handler: generateSceneVideo
+  const generateSceneVideo = (blockId: string) => {
     const block = state.sceneVideoBlocks.find(b => b.id === blockId);
     if (!block) return;
 
-    const prompt = [
-      block.scenePrompt || block.sceneDescription,
-      block.motionPrompt ? `Motion: ${block.motionPrompt}` : "",
-      block.cameraMovement ? `Camera: ${block.cameraMovement}` : "",
-      block.mood ? `Mood: ${block.mood}` : "",
-      block.negativePrompt ? `Avoid: ${block.negativePrompt}` : "",
-    ].filter(Boolean).join(". ");
-
-    if (!prompt.trim()) {
-      alert("Заполните промпт сцены перед генерацией видео!");
-      return;
+    if (!block.firstFrameImage && !block.lastFrameImage) {
+      alert("Для качественной генерации видео рекомендуется иметь хотя бы одно якорное изображение (First или Last Frame)!");
     }
 
     updateBlock(blockId, { generationStatus: "generating" });
-
-    try {
-      // Convert first frame dataUrl → File if available
-      let firstFrameFile: File | null = null;
-      if (block.firstFrameImage?.startsWith("data:")) {
-        const res = await fetch(block.firstFrameImage);
-        const blob = await res.blob();
-        firstFrameFile = new File([blob], "first_frame.jpg", { type: blob.type });
-      }
-
-      const durationMap: Record<string, number> = {
-        "3 сек": 3, "5 сек": 5, "8 сек": 8, "10 сек": 8, "15 сек": 8
-      };
-      const durationSeconds = durationMap[block.duration] ?? 5;
-
-      const results = await generateVideo({
-        prompt,
-        firstFrameFile,
-        durationSeconds,
-        numberOfVideos: 1,
-      });
-
+    
+    setTimeout(() => {
       const vidId = `vid-${Math.random().toString(36).substr(2, 9)}`;
+      const randomGif = MOCK_VIDEOS[Math.floor(Math.random() * MOCK_VIDEOS.length)];
+      
       const newVideo = {
         id: vidId,
-        url: results[0]?.objectUrl ?? "",
-        previewUrl: results[0]?.objectUrl ?? "",
+        url: randomGif,
+        previewUrl: randomGif,
         timestamp: new Date().toLocaleTimeString(),
-        motionType: block.cameraMovement || "auto",
-        videoBase64: results[0]?.videoBase64 ?? null,
-        mimeType: results[0]?.mimeType ?? "video/mp4",
+        motionType: block.cameraMovement || "slow push-in"
       };
 
       const updatedVideos = [...block.generatedVideos, newVideo];
+
       updateBlock(blockId, {
         generationStatus: "success",
         generatedVideos: updatedVideos,
-        selectedVideoId: vidId,
+        selectedVideoId: vidId
       });
-    } catch (err: any) {
-      console.error("Video generation failed:", err);
-      updateBlock(blockId, {
-        generationStatus: "error",
-        validationErrors: { video: err.message },
-      });
-      alert(`Ошибка генерации видео: ${err.message}`);
-    }
+    }, 2500);
   };
 
   // Handler: selectSceneVideo

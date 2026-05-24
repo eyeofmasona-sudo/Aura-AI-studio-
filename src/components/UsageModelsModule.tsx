@@ -203,7 +203,7 @@ export function UsageModelsModule() {
       <div className="flex flex-col gap-6 w-full max-w-7xl mx-auto">
         
         {/* Module Header */}
-        <div className="flex flex-col md:flex-row items-start md:items-center justify-between pb-6 border-b border-slate-800 gap-4">
+        <div className="flex flex-col xl:flex-row items-start xl:items-center justify-between pb-6 border-b border-slate-800 gap-4">
           <div>
             <div className="flex items-center gap-2">
               <span className="px-2 py-0.5 rounded bg-[#00F0FF]/25 text-[#00F0FF] text-[10px] uppercase font-black tracking-widest">
@@ -221,34 +221,34 @@ export function UsageModelsModule() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2 bg-slate-900/60 p-1.5 rounded-lg border border-slate-800">
+          <div className="flex items-center gap-1.5 bg-slate-900/60 p-1 rounded-xl border border-slate-800 w-full xl:w-auto overflow-x-auto whitespace-nowrap scrollbar-none shadow-inner">
             <button
               onClick={() => setActiveTab("status")}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'status' ? 'bg-[#00F0FF] text-black shadow-lg text-[13px]' : 'text-slate-400 hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${activeTab === 'status' ? 'bg-[#00F0FF] text-black shadow-lg font-extrabold' : 'text-slate-400 hover:text-white'}`}
             >
               <Server className="w-3.5 h-3.5" /> Статус API
             </button>
             <button
               onClick={() => setActiveTab("models")}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'models' ? 'bg-[#00F0FF] text-black shadow-lg text-[13px]' : 'text-slate-400 hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${activeTab === 'models' ? 'bg-[#00F0FF] text-black shadow-lg font-extrabold' : 'text-slate-400 hover:text-white'}`}
             >
               <Settings className="w-3.5 h-3.5" /> Модели
             </button>
             <button
               onClick={() => setActiveTab("mapping")}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'mapping' ? 'bg-[#00F0FF] text-black shadow-lg text-[13px]' : 'text-slate-400 hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${activeTab === 'mapping' ? 'bg-[#00F0FF] text-black shadow-lg font-extrabold' : 'text-slate-400 hover:text-white'}`}
             >
               <Database className="w-3.5 h-3.5" /> Маппинг функций
             </button>
             <button
               onClick={() => setActiveTab("dashboard")}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'dashboard' ? 'bg-[#00F0FF] text-black shadow-lg text-[13px]' : 'text-slate-400 hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${activeTab === 'dashboard' ? 'bg-[#00F0FF] text-black shadow-lg font-extrabold' : 'text-slate-400 hover:text-white'}`}
             >
               <Gauge className="w-3.5 h-3.5" /> Аналитика
             </button>
             <button
               onClick={() => setActiveTab("logs")}
-              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 ${activeTab === 'logs' ? 'bg-[#00F0FF] text-black shadow-lg text-[13px]' : 'text-slate-400 hover:text-white'}`}
+              className={`px-3 py-1.5 rounded-md text-xs font-bold transition-all flex items-center gap-1.5 shrink-0 whitespace-nowrap ${activeTab === 'logs' ? 'bg-[#00F0FF] text-black shadow-lg font-extrabold' : 'text-slate-400 hover:text-white'}`}
             >
               <Activity className="w-3.5 h-3.5" /> Логи ({stats.total})
             </button>
@@ -384,7 +384,7 @@ export function UsageModelsModule() {
 
         {activeTab === "models" && (
           <div className="p-6 rounded-2xl bg-slate-900/40 border border-slate-800 flex flex-col gap-6 animate-fade-in">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between border-b border-slate-800 pb-4 gap-4">
               <div>
                 <h3 className="text-md font-black text-[#00F0FF] uppercase tracking-wider">
                   Глобальные Настройки AI-Моделей
@@ -393,17 +393,17 @@ export function UsageModelsModule() {
                   Укажите предпочтительные модели Gemini по умолчанию для каждого функционального типа задач.
                 </p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex flex-wrap sm:flex-nowrap gap-2 shrink-0">
                 <button
                   onClick={handleResetModels}
-                  className="px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-xs font-bold transition-all"
+                  className="w-full sm:w-auto px-3 py-1.5 rounded bg-slate-800 hover:bg-slate-700 text-xs font-bold transition-all whitespace-nowrap"
                   title="Вернет настройки к заводским пресетам"
                 >
                   Сбросить по умолчанию
                 </button>
                 <button
                   onClick={handleSaveModels}
-                  className="px-4 py-1.5 rounded bg-[#00F0FF] hover:bg-[#5ffffc] text-black font-extrabold text-xs uppercase tracking-wide transition-all"
+                  className="w-full sm:w-auto px-4 py-1.5 rounded bg-[#00F0FF] hover:bg-[#5ffffc] text-black font-extrabold text-xs uppercase tracking-wide transition-all whitespace-nowrap"
                 >
                   Сохранить настройки
                 </button>
@@ -419,7 +419,19 @@ export function UsageModelsModule() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               
               {Object.entries(MODEL_OPTIONS).map(([taskKey, options]) => {
-                const label = taskKey.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                const taskLabels: Record<string, string> = {
+                  text_cheap: "Быстрый Текст (Cheap)",
+                  text_balanced: "Сбалансированный Текст (Balanced)",
+                  text_strong: "Сложный Анализ (Strong / Аналитика)",
+                  image_generation: "Генератор Кадров (Image)",
+                  video_generation: "Видеогенерация (Video)",
+                  audio_understanding: "Анализ Аудио (Audio)",
+                  tts: "Синтез Речи (TTS / Голос)",
+                  music: "Генерация Музыки (Music / Lyria)",
+                  default_fallback: "Резервный Обработчик (Fallback)"
+                };
+                
+                const label = taskLabels[taskKey] || taskKey.split('_').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                 
                 const taskDescriptions: Record<string, string> = {
                   text_cheap: "Используется для быстрых текстовых правок, генерации тегов, коротких логлайнов и негативных промптов.",
@@ -429,6 +441,7 @@ export function UsageModelsModule() {
                   video_generation: "Создание кинематографичных 5-секундных сцен на основе промпта и пограничных кадров.",
                   audio_understanding: "Аналитическое сопоставление опорных аудиодорожек и подгонка ритмов сцены.",
                   tts: "Потоковый синтез речи (Text-To-Speech) по SSML инструкциям вокального направления.",
+                  music: "Генерация саундтреков, фонового эмбиента, динамического ритма и музыкальных тем проекта через Lyria.",
                   default_fallback: "Используется, если запрошенный модуль выдал сбой или не определил тип задачи."
                 };
 
@@ -437,10 +450,10 @@ export function UsageModelsModule() {
                     <div>
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-black text-slate-100 uppercase tracking-wide">
-                          {label} Task Model
+                          {label}
                         </span>
                         
-                        {taskKey.includes("strong") || taskKey.includes("video") || taskKey.includes("image") ? (
+                        {taskKey.includes("strong") || taskKey.includes("video") || taskKey.includes("image") || taskKey.includes("music") ? (
                           <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase text-rose-400 bg-rose-500/10 border border-rose-500/25">Heavy Usage</span>
                         ) : (
                           <span className="px-1.5 py-0.5 rounded text-[8px] font-black uppercase text-[#00F0FF] bg-[#00F0FF]/10 border border-[#00F0FF]/25">Light Consumption</span>
@@ -631,10 +644,25 @@ export function UsageModelsModule() {
                     const count = aiStore.logs.filter(l => l.module === mod).length;
                     const pct = stats.total > 0 ? (count / stats.total) * 100 : 0;
                     
+                    const moduleLabels: Record<string, string> = {
+                      idea_prompt: "Идеи и Концепты",
+                      characters: "Персонажи",
+                      scenario: "Раскадровка / Сценарий",
+                      frame_generator: "Генератор Кадров",
+                      video_generator: "Генератор Видео",
+                      music: "Фоновая Музыка / Lyria",
+                      voice: "Озучка / TTS",
+                      audio_editor: "Аудиоредактор",
+                      video_editor: "Видеоредактор",
+                      export: "Экспорт и Сборка",
+                      usage_models: "Панель Управления"
+                    };
+                    const labelName = moduleLabels[mod] || mod.replace('_', ' ');
+                    
                     return (
                       <div key={mod} className="flex flex-col gap-1">
                         <div className="flex justify-between text-[11px] font-bold">
-                          <span className="capitalize text-slate-300">{mod.replace('_', ' ')}</span>
+                          <span className="capitalize text-slate-300">{labelName}</span>
                           <span className="text-slate-400">{count} запр. ({pct.toFixed(0)}%)</span>
                         </div>
                         <div className="w-full bg-slate-950 rounded-full h-1.5 overflow-hidden">

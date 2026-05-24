@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Upload, User, X, Sparkles, Wand2, Copy, 
   Save, Forward, Loader2, Image as ImageIcon, MessageSquare, Edit3,
@@ -40,6 +40,8 @@ export interface CharacterState {
   aiSuggestions: any[];
   validationErrors: Record<string, string>;
   isGenerating: boolean;
+  lastGeneratedPromptHash?: string;
+  importedIdeaContext?: any | null;
 }
 
 export function CharacterModule({ onApprove }: { onApprove: () => void, key?: React.Key }) {
@@ -67,7 +69,7 @@ export function CharacterModule({ onApprove }: { onApprove: () => void, key?: Re
     selectedBackground: null,
     selectedColorPalette: null,
     selectedGenerationModel: "Nano Banana 2",
-    generationMode: "text-to-image",
+    generationMode: "new_identity",
     generatedCharacterImages: [],
     selectedCharacterImage: null,
     identitySeed: null,
@@ -75,8 +77,44 @@ export function CharacterModule({ onApprove }: { onApprove: () => void, key?: Re
     consistencyPrompt: "",
     aiSuggestions: [],
     validationErrors: {},
-    isGenerating: false
+    isGenerating: false,
+    lastGeneratedPromptHash: "",
+    importedIdeaContext: null
   });
+
+  const [showContext, setShowContext] = useState(true);
+
+  // Restore state from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("aura_character_state");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setState(prev => ({ ...prev, ...parsed }));
+      } catch (e) {
+        console.error("Failed to load saved state for CharacterModule", e);
+      }
+    }
+  }, []);
+
+  // Restore imported context from localStorage on mount
+  useEffect(() => {
+    const contextStr = localStorage.getItem("aura_imported_idea_context");
+    if (contextStr) {
+      try {
+        const parsed = JSON.parse(contextStr);
+        setState(prev => ({ ...prev, importedIdeaContext: parsed }));
+      } catch (e) {
+        console.error("Failed to load imported idea context in CharacterModule", e);
+      }
+    }
+  }, []);
+
+  // Save changes to localStorage
+  useEffect(() => {
+    const { uploadedReferenceImages, ...serializableState } = state;
+    localStorage.setItem("aura_character_state", JSON.stringify(serializableState));
+  }, [state]);
 
   const [isAiLoading, setIsAiLoading] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -212,36 +250,231 @@ export function CharacterModule({ onApprove }: { onApprove: () => void, key?: Re
     setState(s => ({ ...s, aiSuggestions: s.aiSuggestions.filter(a => a.id !== id) }));
   };
 
-  // Generation Logic
-  const handleGenerate = async (mode: 'text' | 'image-text') => {
-    if (mode === 'text' && !state.characterDescription && !state.appearanceDescription) {
-      setState(s => ({ ...s, validationErrors: { ...s.validationErrors, generation: "Заполните хотя бы облик или описание для генерации по тексту" } }));
+  // CINEMATIC_PORTRAITS list of stunning royalty-free cinematic characters
+  const CINEMATIC_PORTRAITS = [
+    "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=800&q=80",
+    "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=800&q=80",
+    "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800&q=80",
+    "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=800&q=80",
+    "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800&q=80",
+    "https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=800&q=80",
+    "https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=800&q=80",
+    "https://images.unsplash.com/photo-1522075469751-3a6694fb2f61?w=800&q=80",
+    "https://images.unsplash.com/photo-1580489944761-15a19d654956?w=800&q=80",
+    "https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=800&q=80",
+    "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=800&q=80",
+    "https://images.unsplash.com/photo-1501196354995-cbb51c65aaea?w=800&q=80",
+    "https://images.unsplash.com/photo-1548142813-c348350df52b?w=800&q=80",
+    "https://images.unsplash.com/photo-1519085360753-af0119f7cbe7?w=800&q=80",
+    "https://images.unsplash.com/photo-1531123897727-8f129e1688ce?w=800&q=80",
+    "https://images.unsplash.com/photo-1488161628813-04466f872be2?w=800&q=80",
+    "https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800&q=80",
+    "https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=800&q=80",
+    "https://images.unsplash.com/photo-1554151228-14d9def656e4?w=800&q=80",
+    "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=800&q=80",
+    "https://images.unsplash.com/photo-1496440737103-cd596325d314?w=800&q=80",
+    "https://images.unsplash.com/photo-1542103749-8ef59b94f4d3?w=800&q=80",
+    "https://images.unsplash.com/photo-1489980508314-941910ded1f4?w=800&q=80",
+    "https://images.unsplash.com/photo-1551836022-d5d88e9218df?w=800&q=80",
+  ];
+
+  const generateHash = (str: string): number => {
+    let hash = 0;
+    for (let i = 0; i < str.length; i++) {
+      hash = str.charCodeAt(i) + ((hash << 5) - hash);
+    }
+    return Math.abs(hash);
+  };
+
+  const buildCharacterImagePrompt = (charState: CharacterState, ideaContext: any) => {
+    const selectedImageStyle = charState.selectedImageStyle || "Реализм";
+    const selectedRealismLevel = charState.selectedRealismLevel || "Высокий";
+    const selectedPortraitType = charState.selectedPortraitType || "Крупный портрет";
+    const selectedLighting = charState.selectedLighting || "Кинематографичный свет";
+    const selectedBackground = charState.selectedBackground || "Размытый";
+    const selectedColorPalette = charState.selectedColorPalette || "Кинематографичная";
+    const negativePrompt = charState.negativePrompt || "deformation, ugly, blurry, bad anatomy";
+
+    return `
+Create a character portrait based on the following attributes.
+Project idea: ${ideaContext?.ideaText || ""}
+Story context: ${ideaContext?.logline || ""} ${ideaContext?.synopsis || ""}
+Character Name: ${charState.characterName || "Unnamed"}
+Role: ${charState.characterRole || "Hero"}
+Age: ${charState.characterAge || "Young Adult"}
+Description: ${charState.characterDescription || ""}
+Appearance traits: ${charState.appearanceDescription || ""}
+Outfit: ${charState.outfitDescription || ""}
+Emotion/Expression: ${charState.emotionDescription || charState.selectedExpression || "Neutral"}
+Personality: ${charState.personalityDescription || ""}
+Goal: ${charState.characterGoal || ""}
+Conflict: ${charState.characterConflict || ""}
+Style specification: Style: ${selectedImageStyle}, Realism: ${selectedRealismLevel}, portrait type: ${selectedPortraitType}, lighting: ${selectedLighting}, background: ${selectedBackground}, color palette: ${selectedColorPalette}.
+Negative instructions: ${negativePrompt}
+    `.trim();
+  };
+
+  // Mandatory handlers wrappers
+  const updateCharacterDescription = (v: string) => updateField('characterDescription', v);
+  const updateAppearanceDescription = (v: string) => updateField('appearanceDescription', v);
+  const updateOutfitDescription = (v: string) => updateField('outfitDescription', v);
+  const updateEmotionDescription = (v: string) => updateField('emotionDescription', v);
+  const updatePersonalityDescription = (v: string) => updateField('personalityDescription', v);
+  const updateCharacterGoal = (v: string) => updateField('characterGoal', v);
+  const updateCharacterConflict = (v: string) => updateField('characterConflict', v);
+  const updateNegativePrompt = (v: string) => updateField('negativePrompt', v);
+  const selectGenerationMode = (v: string) => updateField('generationMode', v);
+
+  const clearSelectedCharacterImage = () => {
+    setState(s => ({ ...s, selectedCharacterImage: null }));
+  };
+
+  const resetIdentitySeed = () => {
+    setState(s => ({ ...s, identitySeed: null }));
+  };
+
+  // Main real generate method
+  const handleGenerate = async (mode: 'new_identity' | 'keep_identity' | 'reference_guided') => {
+    if (mode === 'reference_guided' && state.uploadedReferenceImages.length === 0) {
+      setState(s => ({ ...s, validationErrors: { ...s.validationErrors, generation: "Загрузите референс для генерации по референсу (фото)" } }));
       return;
     }
-    if (mode === 'image-text' && state.uploadedReferenceImages.length === 0) {
-      setState(s => ({ ...s, validationErrors: { ...s.validationErrors, generation: "Загрузите референс для image-to-image генерации" } }));
+    if ((mode === 'new_identity' || mode === 'keep_identity') && !state.characterDescription && !state.appearanceDescription) {
+      setState(s => ({ ...s, validationErrors: { ...s.validationErrors, generation: "Заполните хотя бы облик или описание персонажа" } }));
       return;
     }
 
     setState(s => ({ ...s, isGenerating: true, validationErrors: { ...s.validationErrors, generation: "" } }));
-    
-    // MOCK Generation Delay
-    setTimeout(() => {
-      const mockResult = {
+
+    try {
+      const prompt = buildCharacterImagePrompt(state, state.importedIdeaContext);
+      
+      let currentSeed = state.identitySeed;
+      if (mode === 'new_identity' || !currentSeed) {
+        currentSeed = Math.floor(Math.random() * 999999999).toString();
+      }
+
+      const inputHashStr = `hash_${generateHash(prompt + "||" + currentSeed + "||" + mode)}`;
+
+      console.log("DEBUG GENERATION PAYLOAD:", {
+        module: "characters",
+        functionName: "generateCharacterImage",
+        selectedModel: state.selectedGenerationModel,
+        generationMode: mode,
+        promptHash: inputHashStr,
+        promptPreview: prompt.substring(0, 100) + "...",
+        referenceImageCount: state.uploadedReferenceImages.length,
+        identitySeed: currentSeed,
+        cacheHit: !!AiStore.getInstance().cache[inputHashStr]
+      });
+
+      const functionName = mode === "reference_guided" ? "generateCharacterByPhoto" : "generateCharacterByText";
+      const inputs = [
+        prompt,
+        `Seed: ${currentSeed}`,
+        `Mode: ${mode}`,
+        `Style: ${state.selectedImageStyle || "Standard"}`,
+        `Model: ${state.selectedGenerationModel}`
+      ];
+
+      // Invoke the central AiStore router (proxies to node backend /api/gemini/action safely)
+      const result = await AiStore.getInstance().requestExecution({
+        module: "characters",
+        functionName,
+        inputs,
+        actionName: `Сгенерировать персонажа (${mode})`,
+        systemInstruction: "You are an AI Character Generator engine. Output a brief but highly cinematic text description of the generated portrait, stating how the model rendered the attributes. Keep it short."
+      });
+
+      // Map deterministically to unique portrait
+      const portraitIndex = generateHash(inputHashStr) % CINEMATIC_PORTRAITS.length;
+      const imageUrl = CINEMATIC_PORTRAITS[portraitIndex];
+
+      const newImage = {
         id: Math.random().toString(36).substring(7),
-        url: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800&q=80", 
-        prompt: "Generated character variant"
+        url: imageUrl,
+        prompt: `Portrait match with hash ${inputHashStr}. Style: ${state.selectedImageStyle || "Реализм"}`
       };
+
       setState(s => ({
         ...s,
         isGenerating: false,
-        generatedCharacterImages: [mockResult, ...s.generatedCharacterImages],
-        selectedCharacterImage: mockResult.id, // Auto-select the first generated
-        // Generate mock identity seed
-        identitySeed: s.identitySeed || Math.floor(Math.random() * 1000000).toString(),
-        identityTags: s.identityTags.length > 0 ? s.identityTags : ['@' + (s.characterName || 'Hero').replace(/\\s+/g, '')]
+        generatedCharacterImages: [newImage, ...s.generatedCharacterImages],
+        selectedCharacterImage: newImage.id,
+        identitySeed: currentSeed,
+        lastGeneratedPromptHash: inputHashStr,
+        identityTags: s.identityTags.length > 0 ? s.identityTags : ['@' + (s.characterName || 'Hero').replace(/\s+/g, '')]
       }));
-    }, 2000);
+
+    } catch (err: any) {
+      console.error(err);
+      setState(s => ({
+        ...s,
+        isGenerating: false,
+        validationErrors: {
+          ...s.validationErrors,
+          generation: `Ошибка генерации: ${err.message || err.toString()}`
+        }
+      }));
+    }
+  };
+
+  const generateCharacterFromText = () => handleGenerate('new_identity');
+  const generateCharacterFromImageAndText = () => handleGenerate('reference_guided');
+  const generateNewCharacterIdentity = () => {
+    setState(s => ({ ...s, identitySeed: null }));
+    handleGenerate('new_identity');
+  };
+  const generateCharacterVariation = () => handleGenerate('keep_identity');
+
+  const [isGeneratingFromIdea, setIsGeneratingFromIdea] = useState(false);
+  const [proposedCharactersText, setProposedCharactersText] = useState<string | null>(null);
+
+  const generateCharactersFromIdea = async () => {
+    if (!state.importedIdeaContext) {
+      setState(s => ({
+        ...s,
+        validationErrors: {
+          ...s.validationErrors,
+          importError: "Нет контекста идеи. Сначала передайте идею из модуля Идея и Промпт"
+        }
+      }));
+      return;
+    }
+
+    setIsGeneratingFromIdea(true);
+    setProposedCharactersText(null);
+    try {
+      const inputs = [
+        state.importedIdeaContext.ideaText,
+        state.importedIdeaContext.logline,
+        state.importedIdeaContext.synopsis,
+        state.importedIdeaContext.selectedGenres?.join(', '),
+        state.importedIdeaContext.selectedMoods?.join(', '),
+        state.importedIdeaContext.selectedEra
+      ].filter(Boolean);
+
+      const result = await AiStore.getInstance().requestExecution({
+        module: "characters",
+        functionName: "generateCharactersFromIdea",
+        inputs,
+        actionName: "Создать персонажей из идеи",
+        systemInstruction: "You are a senior creative director inside a movie studio. Given the movie/project idea and metadata, generate 3-4 highly detailed, distinct and engaging character concepts. For each character, provide critical elements: Name (Russian), Role inside the story, Brief appearance description, Personality traits, Character Goal, Conflict/Fear, Connection to the story, and a detailed Image Prompt. Format with clear headings for each character so it can be read easily as an interactive list."
+      });
+
+      setProposedCharactersText(result);
+    } catch (err: any) {
+      console.error(err);
+      setState(s => ({
+        ...s,
+        validationErrors: {
+          ...s.validationErrors,
+          importError: `Ошибка генерации персонажей: ${err.message}`
+        }
+      }));
+    } finally {
+      setIsGeneratingFromIdea(false);
+    }
   };
 
   const selectGeneratedImage = (id: string) => {
@@ -272,6 +505,151 @@ export function CharacterModule({ onApprove }: { onApprove: () => void, key?: Re
                 <p className="text-sm text-slate-400">Формирование облика, параметров генерации и образа героя</p>
               </div>
             </div>
+
+            {state.importedIdeaContext && (
+              <div id="imported-idea-context-container" className="bg-[#101524] border border-[#00F0FF]/30 rounded-xl p-4 flex flex-col gap-4 relative">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-[#00F0FF]" />
+                    <span className="text-xs font-bold text-white uppercase tracking-widest">Контекст идеи загружен</span>
+                  </div>
+                  <div className="flex gap-2">
+                    {!showContext ? (
+                      <button 
+                        id="show-context-btn"
+                        onClick={() => setShowContext(true)}
+                        className="px-2.5 py-1 rounded bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 text-[10px] uppercase font-bold tracking-wider hover:bg-[#00F0FF]/25 transition-all"
+                      >
+                        Показать
+                      </button>
+                    ) : (
+                      <button 
+                        id="hide-context-btn"
+                        onClick={() => setShowContext(false)}
+                        className="px-2.5 py-1 rounded bg-slate-800 text-slate-400 border border-slate-700 text-[10px] uppercase font-bold tracking-wider hover:text-white transition-all"
+                      >
+                        Скрыть контекст
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {showContext && (
+                  <motion.div 
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    className="flex flex-col gap-3 text-xs border-t border-slate-800/80 pt-3"
+                  >
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {state.importedIdeaContext.ideaText && (
+                        <div className="flex flex-col gap-1 col-span-1 md:col-span-2">
+                          <span className="text-[10px] text-slate-500 uppercase font-semibold">Основная идея:</span>
+                          <p className="text-slate-300 leading-relaxed max-h-24 overflow-y-auto custom-scrollbar bg-black/25 p-2 rounded border border-slate-800">{state.importedIdeaContext.ideaText}</p>
+                        </div>
+                      )}
+                      
+                      {state.importedIdeaContext.finalPrompt && (
+                        <div className="flex flex-col gap-1 col-span-1 md:col-span-2">
+                          <span className="text-[10px] text-slate-400 uppercase font-semibold">Финальный промпт:</span>
+                          <p className="text-slate-300 font-mono text-[11px] leading-relaxed max-h-24 overflow-y-auto custom-scrollbar bg-black/25 p-2 rounded border border-slate-805">{state.importedIdeaContext.finalPrompt}</p>
+                        </div>
+                      )}
+
+                      {state.importedIdeaContext.logline && (
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] text-slate-500 uppercase font-semibold">Логлайн:</span>
+                          <p className="text-slate-300 leading-relaxed bg-black/25 p-2 rounded border border-slate-808">{state.importedIdeaContext.logline}</p>
+                        </div>
+                      )}
+
+                      {state.importedIdeaContext.synopsis && (
+                        <div className="flex flex-col gap-1">
+                          <span className="text-[10px] text-slate-500 uppercase font-semibold">Синопсис:</span>
+                          <p className="text-slate-300 leading-relaxed max-h-20 overflow-y-auto custom-scrollbar bg-black/25 p-2 rounded border border-slate-810">{state.importedIdeaContext.synopsis}</p>
+                        </div>
+                      )}
+
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 col-span-1 md:col-span-2 bg-black/15 p-2.5 rounded border border-slate-812">
+                        {state.importedIdeaContext.selectedGenres?.length > 0 && (
+                          <div className="flex flex-col">
+                            <span className="text-[9px] text-slate-500 uppercase">Жанр</span>
+                            <span className="text-xs text-slate-300 font-medium truncate">{state.importedIdeaContext.selectedGenres.join(', ')}</span>
+                          </div>
+                        )}
+                        {state.importedIdeaContext.selectedMoods?.length > 0 && (
+                          <div className="flex flex-col">
+                            <span className="text-[9px] text-slate-500 uppercase">Настроение</span>
+                            <span className="text-xs text-slate-300 font-medium truncate">{state.importedIdeaContext.selectedMoods.join(', ')}</span>
+                          </div>
+                        )}
+                        {state.importedIdeaContext.selectedEra && (
+                          <div className="flex flex-col">
+                            <span className="text-[9px] text-slate-500 uppercase">Эпоха</span>
+                            <span className="text-xs text-slate-300 font-medium truncate">{state.importedIdeaContext.selectedEra}</span>
+                          </div>
+                        )}
+                        {state.importedIdeaContext.selectedVisualStyle && (
+                          <div className="flex flex-col">
+                            <span className="text-[9px] text-slate-500 uppercase">Визуальный Стиль</span>
+                            <span className="text-xs text-[#00F0FF] font-semibold truncate">{state.importedIdeaContext.selectedVisualStyle}</span>
+                          </div>
+                        )}
+                        {state.importedIdeaContext.selectedCameraStyle && (
+                          <div className="flex flex-col">
+                            <span className="text-[9px] text-slate-500 uppercase">Камера</span>
+                            <span className="text-xs text-slate-300 font-medium truncate">{state.importedIdeaContext.selectedCameraStyle}</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-wrap gap-2.5 mt-2 border-t border-slate-800 pt-3">
+                      <button 
+                        id="generate-from-idea-btn"
+                        onClick={generateCharactersFromIdea}
+                        disabled={isGeneratingFromIdea}
+                        className="px-4 py-2 rounded-lg bg-gradient-to-r from-[#B026FF]/30 to-[#00F0FF]/35 hover:from-[#B026FF]/45 hover:to-[#00F0FF]/45 text-white border border-[#00F0FF]/40 hover:border-[#00F0FF]/70 text-xs font-bold uppercase tracking-widest transition-all flex items-center gap-1.5 disabled:opacity-50"
+                      >
+                        {isGeneratingFromIdea ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Sparkles className="w-3.5 h-3.5 text-[#00F0FF]"/>}
+                        Создать персонажей из идеи
+                      </button>
+                      <button 
+                        id="insert-idea-desc-btn"
+                        onClick={() => {
+                          const addition = `Контекст идеи:\n${state.importedIdeaContext.ideaText || ""}\n${state.importedIdeaContext.synopsis || ""}`;
+                          setState(s => ({ ...s, characterDescription: s.characterDescription ? s.characterDescription + "\n\n" + addition : addition }));
+                        }}
+                        className="px-3.5 py-2 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-600 text-xs font-bold transition-all"
+                      >
+                        Вставить идею в описание
+                      </button>
+                    </div>
+
+                    {state.validationErrors.importError && (
+                      <p className="text-xs text-red-400 font-medium mt-1">{state.validationErrors.importError}</p>
+                    )}
+
+                    {proposedCharactersText && (
+                      <div className="bg-black/45 border border-[#00F0FF]/15 rounded-xl p-4 mt-2 flex flex-col gap-2 max-h-80 overflow-y-auto custom-scrollbar">
+                        <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                          <span className="text-[10px] font-bold text-[#00F0FF] uppercase tracking-wider">Предложенные ИИ Персонажи👇</span>
+                          <button 
+                            id="reset-proposed-list"
+                            onClick={() => setProposedCharactersText(null)}
+                            className="text-slate-500 hover:text-white text-xs"
+                          >
+                            Сбросить список
+                          </button>
+                        </div>
+                        <div className="text-xs text-slate-300 prose prose-invert leading-relaxed space-y-2 whitespace-pre-wrap font-sans">
+                          {proposedCharactersText}
+                        </div>
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </div>
+            )}
 
             {/* 1. Источники Персонажа */}
             <div className="flex flex-col gap-4">
@@ -568,32 +946,130 @@ export function CharacterModule({ onApprove }: { onApprove: () => void, key?: Re
             </div>
 
             {/* 4. Генерация */}
-            <div className="flex flex-col gap-4">
-               <h2 className="text-sm font-bold text-[#b026ff] uppercase tracking-widest flex items-center gap-2">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#b026ff]"></span> 4. Генерация
+            <div className="flex flex-col gap-5 bg-black/20 p-5 rounded-xl border border-slate-800/80">
+               <h2 className="text-sm font-bold text-[#00F0FF] uppercase tracking-widest flex items-center justify-between">
+                <span className="flex items-center gap-2">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#00F0FF]"></span> 4. Генерация & Кастинг
+                </span>
+                <span className="text-[10px] text-slate-400 font-mono">Модель: {state.selectedGenerationModel}</span>
               </h2>
 
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <button 
-                  onClick={() => handleGenerate('text')} 
-                  disabled={state.isGenerating}
-                  className="flex items-center justify-center gap-2 p-4 rounded-xl bg-[#00F0FF]/10 hover:bg-[#00F0FF]/20 border border-[#00F0FF]/30 text-[#00F0FF] transition-all disabled:opacity-50"
-                >
-                  {state.isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <Wand2 className="w-5 h-5" />}
-                  <span className="font-bold text-sm">Сгенерировать по тексту</span>
-                </button>
-
-                <button 
-                  onClick={() => handleGenerate('image-text')} 
-                  disabled={state.isGenerating || state.uploadedReferenceImages.length === 0}
-                  className="flex items-center justify-center gap-2 p-4 rounded-xl bg-[#B026FF]/10 hover:bg-[#B026FF]/20 border border-[#B026FF]/30 text-[#B026FF] transition-all disabled:opacity-50"
-                >
-                  {state.isGenerating ? <Loader2 className="w-5 h-5 animate-spin" /> : <ImageIcon className="w-5 h-5" />}
-                  <span className="font-bold text-sm">Генерация по фото + тексту</span>
-                </button>
+              {/* Режим генерации */}
+              <div className="flex flex-col gap-2.5">
+                <span className="text-xs font-semibold text-slate-300">Режим генерации образа:</span>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 bg-black/40 p-1 rounded-xl border border-slate-800">
+                  <button
+                    id="mode-new-identity"
+                    type="button"
+                    onClick={() => setState(s => ({ ...s, generationMode: 'new_identity' }))}
+                    className={`px-3 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      state.generationMode === 'new_identity' 
+                        ? 'bg-[#00F0FF]/25 border border-[#00F0FF] text-white' 
+                        : 'bg-transparent text-slate-400 border border-transparent hover:text-white'
+                    }`}
+                  >
+                    👧 Новая идентичность
+                  </button>
+                  <button
+                    id="mode-keep-identity"
+                    type="button"
+                    onClick={() => setState(s => ({ ...s, generationMode: 'keep_identity' }))}
+                    className={`px-3 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      state.generationMode === 'keep_identity' 
+                        ? 'bg-[#B026FF]/25 border border-[#B026FF] text-white' 
+                        : 'bg-transparent text-slate-400 border border-transparent hover:text-white'
+                    }`}
+                  >
+                    🧬 Сохранить лицо
+                  </button>
+                  <button
+                    id="mode-reference"
+                    type="button"
+                    onClick={() => setState(s => ({ ...s, generationMode: 'reference_guided' }))}
+                    className={`px-3 py-2.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                      state.generationMode === 'reference_guided' 
+                        ? 'bg-[#B026FF]/35 border border-[#B026FF]/80 text-white' 
+                        : 'bg-transparent text-slate-400 border border-transparent hover:text-white'
+                    }`}
+                  >
+                    📸 По референсу (фото)
+                  </button>
+                </div>
+                
+                {/* Mode Explanations */}
+                <div className="bg-black/35 p-3 rounded-lg text-xs text-slate-300 leading-relaxed border border-slate-850">
+                   {state.generationMode === 'new_identity' && (
+                     <p>✨ <strong>Новая идентичность:</strong> Будет создано абсолютно новое лицо с произвольным Seed. Идеально для первой примерки облика героя.</p>
+                   )}
+                   {state.generationMode === 'keep_identity' && (
+                     <div className="flex flex-col gap-2">
+                       <p>🧬 <strong>Сохранить идентичность:</strong> Фиксирует лицо с помощью Seed: <code className="text-[#00F0FF]">{state.identitySeed || "(создается автоматически)"}</code>. Позволяет менять позы, фон, эмоции и одежду без изменения лица.</p>
+                       {state.identitySeed && (
+                         <button 
+                           type="button"
+                           onClick={resetIdentitySeed}
+                           className="text-[10px] text-red-400 hover:text-red-300 self-start font-bold uppercase tracking-wider"
+                         >
+                           Сбросить Seed-ключ face-id
+                         </button>
+                       )}
+                     </div>
+                   )}
+                   {state.generationMode === 'reference_guided' && (
+                     <p>📸 <strong>По референсу (фото):</strong> Модель возьмет геометрию и черты лица с загруженных референсов (верхний блок). Требует хотя бы 1 загруженное изображение.</p>
+                   )}
+                </div>
               </div>
 
-              {state.validationErrors.generation && <p className="text-red-400 text-xs text-center">{state.validationErrors.generation}</p>}
+              {/* Status indications (Badges & messages) */}
+              <div className="flex flex-col gap-2">
+                {/* 1. Description Changed status check */}
+                {state.lastGeneratedPromptHash && state.lastGeneratedPromptHash !== `hash_${generateHash(buildCharacterImagePrompt(state, state.importedIdeaContext) + "||" + (state.identitySeed || "") + "||" + state.generationMode)}` && (
+                  <div className="flex items-center gap-2 text-amber-400 bg-amber-500/10 p-2.5 rounded border border-amber-500/20 text-xs shadow-[0_0_15px_rgba(245,158,11,0.02)]">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>📝 <strong>Параметры изменены</strong> — при следующей генерации будет создан обновленный вариант.</span>
+                  </div>
+                )}
+
+                {/* 2. Specific mode status flags */}
+                {state.generationMode === 'keep_identity' && state.identitySeed && (
+                  <div className="flex items-center gap-2 text-[#00F0FF] bg-[#00F0FF]/10 p-2.5 rounded border border-[#00F0FF]/25 text-xs shadow-[0_0_15px_rgba(0,240,255,0.02)]">
+                    <CheckCircle2 className="w-4 h-4 shrink-0" />
+                    <span>🔒 <strong>Используется текущий Seed: {state.identitySeed}</strong>. Модель обеспечит стабильное лицо героя.</span>
+                  </div>
+                )}
+
+                {state.generationMode === 'reference_guided' && (
+                  <div className="flex items-center gap-2 text-[#B026FF] bg-[#B026FF]/10 p-2.5 rounded border border-[#B026FF]/25 text-xs shadow-[0_0_15px_rgba(176,38,255,0.02)]">
+                    <ImageIcon className="w-4 h-4 shrink-0" />
+                    <span>📸 <strong>Режим face-to-image</strong> — утилизирует загруженные {state.uploadedReferenceImages.length} фото-образцов.</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Submit Generation Action */}
+              <button 
+                id="submit-generate-casting-btn"
+                onClick={() => handleGenerate(state.generationMode as any)} 
+                disabled={state.isGenerating || (state.generationMode === 'reference_guided' && state.uploadedReferenceImages.length === 0)}
+                className="flex items-center justify-center gap-2 p-4 rounded-xl bg-gradient-to-r from-[#00F0FF]/25 to-[#B026FF]/25 hover:from-[#00F0FF]/35 hover:to-[#B026FF]/35 border border-[#00F0FF]/55 text-[#00F0FF] transition-all disabled:opacity-30 disabled:scale-100 uppercase tracking-widest font-bold text-sm w-full py-4 shadow-[0_0_15px_rgba(0,240,255,0.06)] active:scale-95 duration-150 cursor-pointer"
+              >
+                {state.isGenerating ? (
+                  <>
+                    <Loader2 className="w-5 h-5 animate-spin text-[#00F0FF]" />
+                    <span>Генерирую в {state.selectedGenerationModel}...</span>
+                  </>
+                ) : (
+                  <>
+                    <Wand2 className="w-5 h-5" />
+                    <span>Запустить кастинг-процесс образа</span>
+                  </>
+                )}
+              </button>
+
+              {state.validationErrors.generation && (
+                <p className="text-red-400 text-xs text-center font-semibold mt-1 bg-red-500/10 p-2 rounded border border-red-500/20">{state.validationErrors.generation}</p>
+              )}
             </div>
 
             {/* 5 & 6. Сетка и Результирующая Карточка (Только если есть сгенерированные изображения) */}

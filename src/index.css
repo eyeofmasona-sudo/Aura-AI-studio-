@@ -112,3 +112,13 @@ body {
   pointer-events: none;
 }
 
+/* Scrollbar None Utility to hide scrollbar on compact scroll elements */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+

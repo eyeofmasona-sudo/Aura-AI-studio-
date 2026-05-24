@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CheckCircle2, X } from 'lucide-react';
 import { specData } from './data';
 import { Sidebar } from './components/Sidebar';
 import { IdeaPromptModule } from './components/IdeaPromptModule/IdeaPromptModule';
@@ -27,6 +28,14 @@ export default function App() {
   const [isAssistantOpen, setIsAssistantOpen] = useState(false);
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [lastTapTime, setLastTapTime] = useState(0);
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
   
   const [unlockedSteps, setUnlockedSteps] = useState<string[]>(specData.map(s => s.id));
   const [approvedSteps, setApprovedSteps] = useState<string[]>([]);
@@ -138,7 +147,7 @@ export default function App() {
           onToggleAssistant={() => setIsAssistantOpen(true)}
         />
         
-        <div className="flex-1 overflow-y-auto px-4 sm:px-10 pt-6 sm:pt-10 pb-20 relative custom-scrollbar bg-[var(--color-space-900)]">
+        <div className="flex-1 overflow-y-auto px-4 md:px-6 lg:px-8 xl:px-10 pt-6 sm:pt-8 pb-20 relative custom-scrollbar bg-[var(--color-space-900)]">
           <div className="absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-[var(--color-space-950)] to-transparent pointer-events-none z-10"></div>
           
           <AnimatePresence mode="wait">
@@ -163,6 +172,13 @@ export default function App() {
               <IdeaPromptModule 
                 key="step-1" 
                 onApprove={() => handleApprove('step-1', getActiveIndex())} 
+                onSendToCharacters={(payload) => {
+                  setActiveStepId('step-2');
+                  setToast({ message: "Идея передана в Персонажи", type: "success" });
+                  if (!unlockedSteps.includes('step-2')) {
+                    setUnlockedSteps(prev => [...prev, 'step-2']);
+                  }
+                }}
               />
             ) : activeStepId === 'step-2' ? (
               <CharacterModule 
@@ -251,6 +267,25 @@ export default function App() {
           onClose={() => setIsAssistantOpen(false)}
         />
       </div>
+
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            initial={{ opacity: 0, y: 50, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            className="fixed bottom-6 right-6 z-[100] bg-[#121824] border border-[#00F0FF]/40 text-white px-5 py-3.5 rounded-xl shadow-[0_0_30px_rgba(0,240,255,0.2)] flex items-center gap-3 font-medium text-sm backdrop-blur-md"
+          >
+            <div className="w-6 h-6 rounded-full bg-[#00F0FF]/10 flex items-center justify-center border border-[#00F0FF]/30 text-[#00F0FF]">
+              <CheckCircle2 className="w-3.5 h-3.5" />
+            </div>
+            <span>{toast.message}</span>
+            <button onClick={() => setToast(null)} className="ml-2 text-slate-400 hover:text-white transition-colors">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AiCostModal />
     </div>

@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Upload, FileAudio, X, Sparkles, Wand2, Copy, 
   Save, Forward, Loader2, Film, MessageSquare, Plus, AlignLeft, Layout, Edit3,
@@ -23,7 +23,14 @@ interface IdeaState {
   validationErrors: Record<string, string>;
 }
 
-export function IdeaPromptModule({ onApprove }: { onApprove: () => void, key?: React.Key }) {
+export function IdeaPromptModule({ 
+  onApprove,
+  onSendToCharacters
+}: { 
+  onApprove: () => void;
+  onSendToCharacters?: (payload: any) => void;
+  key?: React.Key;
+}) {
   const [state, setState] = useState<IdeaState>({
     uploadedAudioFile: null,
     ideaText: "",
@@ -39,6 +46,73 @@ export function IdeaPromptModule({ onApprove }: { onApprove: () => void, key?: R
     aiSuggestions: [],
     validationErrors: {}
   });
+
+  // Restore state from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("aura_idea_prompt_state");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        setState(prev => ({ ...prev, ...parsed }));
+      } catch (e) {
+        console.error("Failed to load saved state for IdeaPromptModule", e);
+      }
+    }
+  }, []);
+
+  // Save state to localStorage on state changes
+  useEffect(() => {
+    const { uploadedAudioFile, ...serializableState } = state;
+    localStorage.setItem("aura_idea_prompt_state", JSON.stringify(serializableState));
+  }, [state]);
+
+  const sendToCharactersModule = () => {
+    const payload = {
+      ideaText: state.ideaText,
+      finalPrompt: state.finalPrompt,
+      logline: state.generatedLogline,
+      synopsis: state.generatedSynopsis,
+      selectedGenres: state.selectedGenres,
+      selectedMoods: state.selectedMoods,
+      selectedEra: state.selectedEra,
+      selectedVisualStyle: state.selectedVisualStyle,
+      selectedCameraStyle: state.selectedCameraStyle,
+      uploadedAudioFileMeta: state.uploadedAudioFile ? {
+        name: state.uploadedAudioFile.name,
+        size: state.uploadedAudioFile.size,
+        type: state.uploadedAudioFile.type
+      } : null,
+      projectId: "aura_project_1",
+      sourceModule: "idea_prompt" as const,
+      updatedAt: new Date().toISOString()
+    };
+
+    if (!payload.ideaText && !payload.finalPrompt && !payload.logline && !payload.synopsis) {
+      setState(s => ({
+        ...s,
+        validationErrors: {
+          ...s.validationErrors,
+          sendError: "Сначала введите идею или соберите промпт"
+        }
+      }));
+      return;
+    }
+
+    setState(s => ({
+      ...s,
+      validationErrors: {
+        ...s.validationErrors,
+        sendError: ""
+      }
+    }));
+
+    // Save the imported context
+    localStorage.setItem("aura_imported_idea_context", JSON.stringify(payload));
+
+    if (onSendToCharacters) {
+      onSendToCharacters(payload);
+    }
+  };
 
   const [isAiLoading, setIsAiLoading] = useState<Record<string, boolean>>({});
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -396,16 +470,29 @@ export function IdeaPromptModule({ onApprove }: { onApprove: () => void, key?: R
             </div>
             
             {/* Actions for next steps */}
-            <div className="flex flex-wrap gap-3 mt-2 justify-end">
-              <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--color-space-800)] border border-slate-600 text-sm font-bold text-slate-200 hover:bg-slate-700 transition-colors">
-                <Save className="w-4 h-4" /> Сохранить локально
-              </button>
-              <button 
-                onClick={onApprove}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#B026FF] to-[#00F0FF] text-white font-bold text-sm shadow-[0_0_20px_rgba(0,240,255,0.4)] hover:shadow-[0_0_30px_rgba(0,240,255,0.6)] hover:scale-[1.02] transition-all"
-              >
-                Передать дальше <Forward className="w-4 h-4" />
-              </button>
+            <div className="flex flex-col gap-2 w-full">
+              <div className="flex flex-wrap gap-3 mt-2 justify-end">
+                <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--color-space-800)] border border-slate-600 text-sm font-bold text-slate-200 hover:bg-slate-700 transition-colors">
+                  <Save className="w-4 h-4" /> Сохранить локально
+                </button>
+                <button 
+                  onClick={sendToCharactersModule}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#00F0FF]/15 border border-[#00F0FF]/55 hover:bg-[#00F0FF]/25 text-sm font-bold text-[#00F0FF] hover:text-white transition-all shadow-[0_0_15px_rgba(0,240,255,0.1)]"
+                >
+                  <Sparkles className="w-4 h-4" /> Передать в Персонажи
+                </button>
+                <button 
+                  onClick={onApprove}
+                  className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-gradient-to-r from-[#B026FF] to-[#00F0FF] text-white font-bold text-sm shadow-[0_0_20px_rgba(0,240,255,0.4)] hover:shadow-[0_0_30px_rgba(0,240,255,0.6)] hover:scale-[1.02] transition-all"
+                >
+                  Передать дальше <Forward className="w-4 h-4" />
+                </button>
+              </div>
+              {state.validationErrors.sendError && (
+                <p className="text-red-400 font-semibold text-xs text-right mt-1 drop-shadow-[0_0_8px_rgba(239,68,68,0.3)]">
+                  {state.validationErrors.sendError}
+                </p>
+              )}
             </div>
           </div>
           
