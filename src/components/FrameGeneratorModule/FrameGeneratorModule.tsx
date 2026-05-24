@@ -166,12 +166,34 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
     setState(s => ({ ...s, aiSuggestions: [...s.aiSuggestions, newSug] }));
   };
 
-  const runAiAction = (title: string, prompt: string, callback: (res: string) => void) => {
+  const runAiAction = async (title: string, prompt: string, callback: (res: string) => void) => {
     setState(s => ({ ...s, isGenerating: true }));
-    setTimeout(() => {
-      callback(`[Сгенерировано ИИ: ${title}]\n${prompt}`);
+    try {
+      const scene = state.scenes.find(s => s.id === state.selectedSceneId);
+      const chapter = state.chapters.find(c => c.id === state.selectedChapterId);
+      const frame = state.frames.find(f => f.id === state.selectedFrameId);
+      const context = [
+        prompt,
+        scene ? `Сцена: ${scene.title}, Локация: ${scene.location}, Стиль: ${scene.visualStyleHint}` : '',
+        chapter ? `Глава: ${chapter.title}, Тон: ${chapter.visualTone}` : '',
+        frame ? `Кадр: ${frame.title}, Действие: ${frame.action}, Персонажи: ${frame.characters}` : '',
+        state.imagePrompt ? `Текущий промпт: ${state.imagePrompt}` : '',
+      ].filter(Boolean);
+
+      const res = await fetch('/api/gemini/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ actionName: title, inputs: context, specTitle: 'Генератор Кадров' }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Gemini error');
+      callback(data.result ?? '');
+    } catch (err: any) {
+      console.error('runAiAction failed:', err);
+      callback(`Ошибка: ${err.message}`);
+    } finally {
       setState(s => ({ ...s, isGenerating: false }));
-    }, 1500);
+    }
   };
 
   const applySuggestion = (id: string) => {
@@ -521,142 +543,158 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
   const getSceneName = () => state.scenes.find(s => s.id === state.selectedSceneId)?.title || "Unknown Scene";
   const getChapterName = () => state.chapters.find(c => c.id === state.selectedChapterId)?.title || "Unknown Chapter";
 
-  const generateWithParams = (type: 'standard' | 'first-frame' | 'last-frame' | 'nano-banana') => {
+  const generateWithParams = async (type: 'standard' | 'first-frame' | 'last-frame' | 'nano-banana') => {
+    if (!state.imagePrompt.trim()) {
+      alert("Сначала соберите Image Prompt (кнопка «Собрать Image Prompt»)!");
+      return;
+    }
     setState(s => ({ ...s, isGenerating: true }));
-    setTimeout(() => {
-      const newImages: GeneratedImage[] = [];
+
+    try {
       const numVars = state.selectedVariationCount || 1;
-      
-      const selectedStyle = state.selectedVisualStyle || "cinematic realism";
-      const englishStyle = selectedStyle === "cinematic realism" ? "epic dramatic cinematic wide shot film scene"
-                         : selectedStyle === "stylized realism" ? "photorealistic styled film scene"
-                         : selectedStyle === "concept art" ? "stylized digital concept art illustration"
-                         : selectedStyle === "noir" ? "black and white cinematic moody film noir scene"
-                         : selectedStyle === "cyberpunk" ? "neon-lit cyberpunk street scene keyframe"
-                         : selectedStyle === "fantasy" ? "magical illustration conceptual art scene"
-                         : selectedStyle === "commercial glossy" ? "high-end commercial professional studio lighting glossy keyframe"
-                         : selectedStyle === "documentary realism" ? "realistic raw documentary camera photo style"
-                         : selectedStyle === "animation-inspired" ? "anime series screenshot dynamic keyframe"
-                         : `${selectedStyle} styled movie theme`;
 
-      // Build parameters list dynamically so they are always guaranteed in the prompt
-      const paramsList = [
-        state.selectedShotType ? `shot type: ${state.selectedShotType}` : null,
-        state.selectedCameraAngle ? `angle: ${state.selectedCameraAngle}` : null,
-        state.selectedCameraMovement ? `camera movement: ${state.selectedCameraMovement}` : null,
-        state.selectedLighting ? `lighting: ${state.selectedLighting}` : null,
-        state.selectedRealismLevel ? `realism: ${state.selectedRealismLevel}` : null,
-        state.selectedColorPalette ? `colors: ${state.selectedColorPalette}` : null,
-        state.selectedAspectRatio ? `aspect ratio: ${state.selectedAspectRatio}` : null,
-      ].filter(Boolean);
+      // Map frameType → cinematic prefix for image generation prompt
+      const typePrefix: Record<string, string> = {
+        'first-frame': 'Cinematic first frame of scene, opening moment, establishing shot.',
+        'last-frame': 'Cinematic last frame of scene, peak emotional moment, scene resolution.',
+        'nano-banana': 'Ultra-detailed cinematic keyframe, maximum visual quality.',
+        'standard': 'Cinematic film still, key moment.',
+      };
 
-      const paramsSuffix = paramsList.length > 0 ? `, style nuances: ${paramsList.join(", ")}` : "";
+      const aspectRatioMap: Record<string, '16:9' | '9:16' | '1:1' | '4:3' | '3:4'> = {
+        '16:9': '16:9', '9:16': '9:16', '1:1': '1:1', '4:3': '4:3', '3:4': '3:4'
+      };
+      const aspectRatio = aspectRatioMap[state.selectedAspectRatio ?? '16:9'] ?? '16:9';
 
-      for(let i=0; i<numVars; i++) {
-        const seedValue = Math.floor(Math.random() * 999999999).toString();
-        // Fallback context if prompt is empty
-        let basePrompt = state.imagePrompt;
-        if (!basePrompt.trim()) {
-          const currentFrame = state.frames.find(fr => fr.id === state.selectedFrameId);
-          basePrompt = currentFrame?.action || "cinematic shot, highly detailed composition";
+      const newImages: GeneratedImage[] = [];
+
+      for (let i = 0; i < numVars; i++) {
+        const fullPrompt = [
+          typePrefix[type],
+          state.imagePrompt,
+          state.selectedShotType ? `Shot type: ${state.selectedShotType}.` : '',
+          state.selectedCameraAngle ? `Camera angle: ${state.selectedCameraAngle}.` : '',
+          state.selectedCameraMovement ? `Camera movement: ${state.selectedCameraMovement}.` : '',
+          state.selectedLighting ? `Lighting: ${state.selectedLighting}.` : '',
+          state.selectedVisualStyle ? `Visual style: ${state.selectedVisualStyle}.` : '',
+          state.selectedRealismLevel ? `Realism: ${state.selectedRealismLevel}.` : '',
+          state.selectedColorPalette ? `Color palette: ${state.selectedColorPalette}.` : '',
+          'ARRI Alexa 4K, film grain, professional cinematography.',
+          state.negativePrompt ? `Avoid: ${state.negativePrompt}.` : 'No text, no watermarks, no CGI artifacts.',
+        ].filter(Boolean).join(' ');
+
+        const res = await fetch('/api/generate/image', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: fullPrompt, numberOfImages: 1, aspectRatio }),
+        });
+
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error || `Image API error ${res.status}`);
         }
 
-        const cleanPrompt = `${englishStyle}, ${basePrompt}${paramsSuffix}, highly detailed, 8k`
-          .replace(/[^a-zA-Z0-9,\s\-:()]/g, "")
-          .substring(0, 400);
+        const data = await res.json();
+        const imgData = data.images?.[0];
+        if (!imgData?.imageBase64) throw new Error('No image data returned');
 
-        const imageUrl = `https://image.pollinations.ai/p/${encodeURIComponent(cleanPrompt)}?width=1024&height=1024&nologo=true&seed=${seedValue}`;
+        const dataUrl = `data:${imgData.mimeType ?? 'image/jpeg'};base64,${imgData.imageBase64}`;
 
         newImages.push({
-          id: Math.random().toString(),
-          url: imageUrl,
-          prompt: basePrompt,
+          id: Math.random().toString(36).substr(2, 9),
+          url: dataUrl,
+          prompt: state.imagePrompt,
           frameType: type,
           sceneName: getSceneName(),
-          chapterName: getChapterName()
+          chapterName: getChapterName(),
         });
       }
 
       setState(s => {
         let firstFrameId = s.selectedFirstFrameId;
         let lastFrameId = s.selectedLastFrameId;
-        
         if (type === 'first-frame' && newImages.length > 0) firstFrameId = newImages[0].id;
         if (type === 'last-frame' && newImages.length > 0) lastFrameId = newImages[0].id;
-        
         return {
           ...s,
           generatedFrameImages: [...newImages, ...s.generatedFrameImages],
-          selectedFrameImage: newImages[0].id,
+          selectedFrameImage: newImages[0]?.id ?? s.selectedFrameImage,
           selectedFirstFrameId: firstFrameId,
           selectedLastFrameId: lastFrameId,
-          isGenerating: false
+          isGenerating: false,
         };
       });
-    }, 2000);
+    } catch (err: any) {
+      console.error('generateWithParams failed:', err);
+      setState(s => ({ ...s, isGenerating: false }));
+      alert(`Ошибка генерации кадра: ${err.message}`);
+    }
   };
 
-  const generateFirstLastPair = () => {
+  const generateFirstLastPair = async () => {
+    if (!state.imagePrompt.trim()) {
+      alert("Сначала соберите Image Prompt!");
+      return;
+    }
     setState(s => ({ ...s, isGenerating: true }));
-    setTimeout(() => {
-      const pairId = Math.random().toString();
-      const seed1 = Math.floor(Math.random() * 999999999).toString();
-      const seed2 = Math.floor(Math.random() * 999999999).toString();
-      const selectedStyle = state.selectedVisualStyle || "cinematic realism";
 
-      const englishStyle = selectedStyle === "cinematic realism" ? "epic dramatic cinematic wide shot film scene"
-                         : selectedStyle === "stylized realism" ? "photorealistic styled film scene"
-                         : selectedStyle === "concept art" ? "stylized digital concept art illustration"
-                         : selectedStyle === "noir" ? "black and white cinematic moody film noir scene"
-                         : selectedStyle === "cyberpunk" ? "neon-lit cyberpunk street scene keyframe"
-                         : selectedStyle === "fantasy" ? "magical illustration conceptual art scene"
-                         : selectedStyle === "commercial glossy" ? "high-end commercial professional studio lighting glossy keyframe"
-                         : selectedStyle === "documentary realism" ? "realistic raw documentary camera photo style"
-                         : selectedStyle === "animation-inspired" ? "anime series screenshot dynamic keyframe"
-                         : `${selectedStyle} styled movie theme`;
+    try {
+      const aspectRatioMap: Record<string, '16:9' | '9:16' | '1:1' | '4:3' | '3:4'> = {
+        '16:9': '16:9', '9:16': '9:16', '1:1': '1:1', '4:3': '4:3', '3:4': '3:4'
+      };
+      const aspectRatio = aspectRatioMap[state.selectedAspectRatio ?? '16:9'] ?? '16:9';
 
-      // Build parameters list dynamically so they are always guaranteed in the prompt
-      const paramsList = [
-        state.selectedShotType ? `shot type: ${state.selectedShotType}` : null,
-        state.selectedCameraAngle ? `angle: ${state.selectedCameraAngle}` : null,
-        state.selectedCameraMovement ? `camera movement: ${state.selectedCameraMovement}` : null,
-        state.selectedLighting ? `lighting: ${state.selectedLighting}` : null,
-        state.selectedRealismLevel ? `realism: ${state.selectedRealismLevel}` : null,
-        state.selectedColorPalette ? `colors: ${state.selectedColorPalette}` : null,
-        state.selectedAspectRatio ? `aspect ratio: ${state.selectedAspectRatio}` : null,
-      ].filter(Boolean);
+      const techSuffix = [
+        state.selectedShotType ? `Shot: ${state.selectedShotType}.` : '',
+        state.selectedCameraAngle ? `Angle: ${state.selectedCameraAngle}.` : '',
+        state.selectedLighting ? `Lighting: ${state.selectedLighting}.` : '',
+        state.selectedVisualStyle ? `Style: ${state.selectedVisualStyle}.` : '',
+        state.selectedColorPalette ? `Color: ${state.selectedColorPalette}.` : '',
+        'ARRI Alexa 4K, cinematic, film grain.',
+        state.negativePrompt ? `Avoid: ${state.negativePrompt}.` : 'No text, no watermarks.',
+      ].filter(Boolean).join(' ');
 
-      const paramsSuffix = paramsList.length > 0 ? `, style nuances: ${paramsList.join(", ")}` : "";
+      const firstPrompt = `Cinematic first frame, scene opening, establishing moment. ${state.imagePrompt} ${techSuffix}`;
+      const lastPrompt  = `Cinematic last frame, peak emotional climax, scene resolution. ${state.imagePrompt} ${techSuffix}`;
 
-      const basePrompt = state.imagePrompt || "atmospheric scene keyframe";
+      const [resFirst, resLast] = await Promise.all([
+        fetch('/api/generate/image', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: firstPrompt, numberOfImages: 1, aspectRatio }),
+        }),
+        fetch('/api/generate/image', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: lastPrompt, numberOfImages: 1, aspectRatio }),
+        }),
+      ]);
 
-      const cleanPromptFirst = `keyframe start of scene, ${englishStyle}, ${basePrompt}${paramsSuffix}, cinematic lighting, detailed, 8k`
-        .replace(/[^a-zA-Z0-9,\s\-:()]/g, "")
-        .substring(0, 400);
+      if (!resFirst.ok || !resLast.ok) throw new Error('Image generation failed for pair');
 
-      const cleanPromptLast = `keyframe end of scene, dynamic climax, ${englishStyle}, ${basePrompt}${paramsSuffix}, cinematic lighting, detailed, 8k`
-        .replace(/[^a-zA-Z0-9,\s\-:()]/g, "")
-        .substring(0, 400);
+      const [dataFirst, dataLast] = await Promise.all([resFirst.json(), resLast.json()]);
+
+      const toDataUrl = (d: any) => `data:${d.images?.[0]?.mimeType ?? 'image/jpeg'};base64,${d.images?.[0]?.imageBase64}`;
+
+      const pairId = Math.random().toString(36).substr(2, 9);
 
       const firstPairImg: GeneratedImage = {
-        id: Math.random().toString(),
-        url: `https://image.pollinations.ai/p/${encodeURIComponent(cleanPromptFirst)}?width=1024&height=1024&nologo=true&seed=${seed1}`,
-        prompt: `[START OF SCENE] ${state.imagePrompt}`,
+        id: Math.random().toString(36).substr(2, 9),
+        url: toDataUrl(dataFirst),
+        prompt: `[FIRST FRAME] ${state.imagePrompt}`,
         frameType: 'anchor-pair',
         sceneName: getSceneName(),
         chapterName: getChapterName(),
         pairId,
-        pairRole: 'first'
+        pairRole: 'first',
       };
       const lastPairImg: GeneratedImage = {
-        id: Math.random().toString(),
-        url: `https://image.pollinations.ai/p/${encodeURIComponent(cleanPromptLast)}?width=1024&height=1024&nologo=true&seed=${seed2}`,
-        prompt: `[END OF SCENE] ${state.imagePrompt}`,
+        id: Math.random().toString(36).substr(2, 9),
+        url: toDataUrl(dataLast),
+        prompt: `[LAST FRAME] ${state.imagePrompt}`,
         frameType: 'anchor-pair',
         sceneName: getSceneName(),
         chapterName: getChapterName(),
         pairId,
-        pairRole: 'last'
+        pairRole: 'last',
       };
 
       setState(s => ({
@@ -665,10 +703,15 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
         generatedAnchorPairs: [...s.generatedAnchorPairs, { id: pairId, firstFrameId: firstPairImg.id, lastFrameId: lastPairImg.id }],
         selectedFirstFrameId: firstPairImg.id,
         selectedLastFrameId: lastPairImg.id,
-        isGenerating: false
+        isGenerating: false,
       }));
-    }, 3000);
+    } catch (err: any) {
+      console.error('generateFirstLastPair failed:', err);
+      setState(s => ({ ...s, isGenerating: false }));
+      alert(`Ошибка генерации пары кадров: ${err.message}`);
+    }
   };
+
 
   const handleGenerationMenu = () => {
     switch (state.selectedGenerationModel) {
@@ -680,14 +723,92 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
     }
   };
 
-  const enhanceFrameCinematic = () => runAiAction('Make Cinematic', state.imagePrompt, res => updateField('imagePrompt', res));
-  const enhanceFrameAccuracyToScene = () => runAiAction('Accuracy to Scene', state.imagePrompt, res => updateField('imagePrompt', res));
-  const checkSceneContinuity = () => runAiAction('Continuity', 'Проверить кадры', res => updateField('continuityNotes', res));
-  const checkFirstLastConsistency = () => runAiAction('First/Last Check', 'Сравнить', res => updateField('continuityNotes', res));
+  const enhanceFrameCinematic = () => runAiAction(
+    'Сделать кинематографичнее',
+    `Улучши этот image prompt, добавь кинематографические детали, камерный язык, освещение и атмосферу. Верни только улучшенный промпт на английском, без пояснений. Текущий промпт: ${state.imagePrompt || 'cinematic shot'}`,
+    res => updateField('imagePrompt', res)
+  );
 
-  const saveFrameGeneratorModule = () => alert("Shot List сохранен!");
-  const sendFramesToVideoGenerator = () => alert("Якорные кадры переданы в Видеогенератор");
-  const sendFramesToVideoEditor = () => alert("Кадры переданы в Видеоредактор");
+  const enhanceFrameAccuracyToScene = () => runAiAction(
+    'Точнее по сценарию',
+    `Перепиши image prompt так, чтобы он точнее отражал сцену из сценария. Верни только промпт на английском. Текущий промпт: ${state.imagePrompt || 'cinematic shot'}`,
+    res => updateField('imagePrompt', res)
+  );
+
+  const checkSceneContinuity = () => runAiAction(
+    'Проверить Continuity Сцены',
+    `Проверь визуальную непрерывность кадров в сцене. Найди потенциальные проблемы: несоответствие освещения, костюмов, расположения персонажей, движения камеры. Дай конкретные замечания. Кадров в shot list: ${state.frames.length}`,
+    res => updateField('continuityNotes', (state.continuityNotes ? state.continuityNotes + '\n\n' : '') + res)
+  );
+
+  const checkFirstLastConsistency = () => runAiAction(
+    'Проверить First/Last Frame',
+    `Проверь соответствие первого и последнего кадра сцены. Оцени: визуальный стиль, освещение, расположение персонажей, цветовая палитра. First frame ID: ${state.selectedFirstFrameId ?? 'не выбран'}, Last frame ID: ${state.selectedLastFrameId ?? 'не выбран'}`,
+    res => updateField('continuityNotes', (state.continuityNotes ? state.continuityNotes + '\n\n' : '') + res)
+  );
+
+  const saveFrameGeneratorModule = () => {
+    // Save frames and generated images to localStorage for bridge
+    const saveData = {
+      frames: state.frames,
+      generatedFrameImages: state.generatedFrameImages.map(img => ({
+        ...img,
+        // Keep data URLs (base64) — they persist in localStorage
+      })),
+      generatedAnchorPairs: state.generatedAnchorPairs,
+      selectedFirstFrameId: state.selectedFirstFrameId,
+      selectedLastFrameId: state.selectedLastFrameId,
+      chapters: state.chapters,
+      scenes: state.scenes,
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem('aura_frame_generator_state', JSON.stringify(saveData));
+    alert(`Shot List сохранён! ${state.frames.length} кадров, ${state.generatedFrameImages.length} изображений.`);
+  };
+
+  const sendFramesToVideoGenerator = () => {
+    // Write selected anchor images to video_generator_blocks format
+    const existing = localStorage.getItem('video_generator_blocks');
+    const blocks = existing ? JSON.parse(existing) : [];
+
+    // Update blocks with matching frame data
+    let updatedCount = 0;
+    state.frames.forEach(frame => {
+      const blockIdx = blocks.findIndex((b: any) => b.id === frame.sceneId || b.sceneTitle === frame.title);
+      const firstImg = state.generatedFrameImages.find(i => i.id === frame.firstFrameAnchorId);
+      const lastImg  = state.generatedFrameImages.find(i => i.id === frame.lastFrameAnchorId);
+      const mainImg  = state.generatedFrameImages.find(i => i.id === frame.selectedImageId);
+
+      if (blockIdx >= 0) {
+        if (firstImg) blocks[blockIdx].firstFrameImage = firstImg.url;
+        if (lastImg)  blocks[blockIdx].lastFrameImage  = lastImg.url;
+        updatedCount++;
+      } else if (firstImg || mainImg) {
+        // Create new block
+        blocks.push({
+          id: frame.id,
+          sceneTitle: frame.title,
+          sceneDescription: frame.action,
+          location: frame.location,
+          characters: frame.characters ? frame.characters.split(',').map((c: string) => c.trim()) : [],
+          firstFrameImage: firstImg?.url ?? mainImg?.url ?? null,
+          lastFrameImage: lastImg?.url ?? null,
+          generatedVideos: [],
+          selectedVideoId: null,
+          generationStatus: 'idle',
+        });
+        updatedCount++;
+      }
+    });
+
+    localStorage.setItem('video_generator_blocks', JSON.stringify(blocks));
+    alert(`Передано в Генератор Видео: ${updatedCount} кадров с якорями.`);
+  };
+
+  const sendFramesToVideoEditor = () => {
+    saveFrameGeneratorModule();
+    alert('Кадры сохранены. Генератор Видео и Видеоредактор подхватят их через bridge при импорте.');
+  };
 
   const assignFrameRole = (imageId: string, role: 'primary' | 'first' | 'last') => {
     if (role === 'primary') {
