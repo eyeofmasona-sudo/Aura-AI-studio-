@@ -158,37 +158,53 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
     });
   };
 
-  // 1. Источники аудио (Import / Upload)
-  const importMusic = () => {
-    const mockMusic: ImportedAudioItem = {
-      id: `mus-${Date.now()}`,
-      title: "Generated Cinematic Theme",
-      source: 'music',
-      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
-      duration: "2:05",
-      createdAt: new Date().toLocaleTimeString()
-    };
-    updateState({ importedMusic: [...state.importedMusic, mockMusic] });
-    alert("Музыка импортирована из модуля «Музыка»!");
+  // ── Gemini helper ────────────────────────────────────────────────────────────
+  const callGemini = async (actionName: string, inputs: string[]): Promise<string> => {
+    const res = await fetch("/api/gemini/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actionName, inputs, specTitle: "Аудиоредактор" }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Gemini error");
+    return data.result ?? "";
   };
 
-  const importVoiceAudios = () => {
-    const mockVoice: ImportedAudioItem = {
-      id: `voi-${Date.now()}`,
-      title: "Voice Line - Scene 1",
-      source: 'voice',
-      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
-      duration: "0:25",
-      createdAt: new Date().toLocaleTimeString()
-    };
-    updateState({ importedVoiceAudios: [...state.importedVoiceAudios, mockVoice] });
-    alert("TTS-реплики импортированы из модуля «Голос / TTS»!");
+  // 1. Источники аудио — реальный bridge из других модулей
+  const importMusic = async () => {
+    try {
+      const { getMusicAssets } = await import("../../services/moduleBridge");
+      const tracks = getMusicAssets();
+      if (!tracks.length) {
+        alert("Нет сгенерированной музыки. Создайте трек в модуле «Музыка» с помощью Lyria.");
+        return;
+      }
+      const existingIds = new Set(state.importedMusic.map(m => m.id));
+      const fresh = tracks.filter(t => !existingIds.has(t.id)).map(t => ({ ...t, source: 'music' as const }));
+      if (!fresh.length) { alert("Все треки уже импортированы."); return; }
+      updateState({ importedMusic: [...state.importedMusic, ...fresh] });
+      alert(`Импортировано треков: ${fresh.length}`);
+    } catch (err: any) { alert(`Ошибка импорта: ${err.message}`); }
+  };
+
+  const importVoiceAudios = async () => {
+    try {
+      const { getVoiceAssets } = await import("../../services/moduleBridge");
+      const audios = getVoiceAssets();
+      if (!audios.length) {
+        alert("Нет голосовых дорожек. Создайте озвучку в модуле «Голос / TTS».");
+        return;
+      }
+      const existingIds = new Set(state.importedVoiceAudios.map(v => v.id));
+      const fresh = audios.filter(a => !existingIds.has(a.id)).map(a => ({ ...a, source: 'voice' as const }));
+      if (!fresh.length) { alert("Все голосовые дорожки уже импортированы."); return; }
+      updateState({ importedVoiceAudios: [...state.importedVoiceAudios, ...fresh] });
+      alert(`Импортировано голосовых дорожек: ${fresh.length}`);
+    } catch (err: any) { alert(`Ошибка импорта: ${err.message}`); }
   };
 
   const openAudioUpload = () => {
-    if (fileInputRef.current) {
-      fileInputRef.current.click();
-    }
+    if (fileInputRef.current) fileInputRef.current.click();
   };
 
   const processUploadedAudio = (files: FileList) => {
@@ -209,15 +225,11 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
   const handleAudioDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setIsDragging(false);
-    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
-      processUploadedAudio(e.dataTransfer.files);
-    }
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) processUploadedAudio(e.dataTransfer.files);
   };
 
   const handleAudioSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files && e.target.files.length > 0) {
-      processUploadedAudio(e.target.files);
-    }
+    if (e.target.files && e.target.files.length > 0) processUploadedAudio(e.target.files);
   };
 
   const removeAudioFile = (audioId: string) => {
@@ -229,11 +241,7 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
     });
   };
 
-  const replaceAudioFile = (audioId: string) => {
-    // Simulated replace action
-    alert(`Загрузите новый файл, чтобы заменить ${audioId}.`);
-    openAudioUpload();
-  };
+  const replaceAudioFile = (_audioId: string) => { openAudioUpload(); };
 
   const togglePlayAudio = (url: string, id: string) => {
     if (isPlaying === id) {
@@ -243,16 +251,7 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
       if (audioRef.current) audioRef.current.pause();
       setIsPlaying(id);
       audioRef.current = new Audio(url);
-      audioRef.current.play().catch(e => {
-        console.error(e);
-        const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const osc = ctx.createOscillator();
-        osc.type = "sine";
-        osc.frequency.setValueAtTime(440, ctx.currentTime);
-        osc.connect(ctx.destination);
-        osc.start();
-        setTimeout(() => osc.stop(), 300);
-      });
+      audioRef.current.play().catch(e => console.error(e));
       audioRef.current.onended = () => setIsPlaying(null);
     }
   };
@@ -260,28 +259,16 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
   // 2. Audio Timeline
   const addAudioClipToTrack = (audioId: string, trackType: 'music' | 'voice' | 'sfx' | 'ambience', title: string) => {
     const newClip: AudioClip = {
-      id: `clip-${Date.now()}`,
-      audioId,
-      title,
-      trackType,
-      startTime: 0,
-      endTime: 10,
-      volume: 80,
-      fadeIn: 0,
-      fadeOut: 0,
-      isMuted: false,
-      isSolo: false,
-      order: state.audioTracks.length
+      id: `clip-${Date.now()}`, audioId, title, trackType,
+      startTime: 0, endTime: 10, volume: 80, fadeIn: 0, fadeOut: 0,
+      isMuted: false, isSolo: false, order: state.audioTracks.length
     };
     updateState({ audioTracks: [...state.audioTracks, newClip] });
     setActiveTab('timeline');
-    alert("Клип добавлен на таймлайн!");
   };
 
   const updateAudioClip = (clipId: string, patch: Partial<AudioClip>) => {
-    updateState({
-      audioTracks: state.audioTracks.map(c => c.id === clipId ? { ...c, ...patch } : c)
-    });
+    updateState({ audioTracks: state.audioTracks.map(c => c.id === clipId ? { ...c, ...patch } : c) });
   };
 
   const deleteAudioClip = (clipId: string) => {
@@ -291,97 +278,185 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
     });
   };
 
-  const reorderAudioClips = () => {
-    // Mock reorder to shift items up/down
-    alert("Reorder functionality not fully implemented in UI preview yet.");
+  const reorderAudioClips = () => {}; // drag-and-drop handled in UI
+
+  // 4. SFX & Ambience — реальный Gemini
+  const generateSfxList = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const context = [
+        `Треков музыки: ${state.importedMusic.length}, голоса: ${state.importedVoiceAudios.length}`,
+        `Платформа: ${state.selectedPlatformTarget ?? "youtube"}`,
+        state.audioMixPlan ? `Концепция: ${state.audioMixPlan.substring(0, 100)}` : "",
+      ].filter(Boolean);
+      const result = await callGemini(
+        "Подобрать список SFX звуковых эффектов с таймингами. Формат каждой строки: Название | Сцена | Тайминг | Интенсивность | Описание",
+        context
+      );
+      const lines = result.split("\n").filter(l => l.includes("|"));
+      const parsed: SFXItem[] = lines.map((line, i) => {
+        const p = line.split("|").map(s => s.trim());
+        return { id: `sfx-${Date.now()}-${i}`, name: p[0] ?? `SFX ${i+1}`, sceneMapping: p[1] ?? "Сцена 1", timing: p[2] ?? "00:00", intensity: p[3] ?? "60%", description: p[4] ?? "" };
+      });
+      updateState({ isProcessing: false, sfxList: parsed.length ? parsed : state.sfxList });
+      if (!parsed.length) alert(result);
+    } catch (err: any) { updateState({ isProcessing: false }); alert(`Ошибка: ${err.message}`); }
   };
 
-  // 3. Clear and Process (Controls)
-  // Covered directly by input bindings to state
-
-  // 4. SFX and Ambience
-  const generateSfxList = () => {
-    const sfx: SFXItem[] = [
-      { id: 'sfx1', name: "Cyberpunk Door Heavy", sceneMapping: "Сцена 1", timing: "00:05", intensity: "80%", description: "Тяжелая металлическая дверь с гидравлическим пневмо-выдохом." },
-      { id: 'sfx2', name: "Rain Neon City", sceneMapping: "Сцена 1", timing: "Loop", intensity: "40%", description: "Мелкий дождь, ударяющийся о пластик и металл." }
-    ];
-    updateState({ sfxList: sfx });
-    alert("ИИ подобрал SFX для сцен!");
+  const generateAmbiencePlan = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const result = await callGemini("Создать детальный Ambience Plan для каждой сцены: фоновые шумы, текстуры, дроны, атмосфера", [
+        `Платформа: ${state.selectedPlatformTarget ?? "youtube"}`,
+        state.audioMixPlan ? `Микс концепция: ${state.audioMixPlan.substring(0, 80)}` : "Кинематографический проект",
+      ]);
+      updateState({ isProcessing: false, ambiencePlan: result });
+    } catch (err: any) { updateState({ isProcessing: false }); alert(`Ошибка: ${err.message}`); }
   };
 
-  const generateAmbiencePlan = () => {
-    updateState({
-      ambiencePlan: `[Сцена 1]: Низкочастотный гул (Drone) на бэкграунде (C1), капли воды, отдаленные сирены.\n[Сцена 2]: Шум толпы в синт-баре, приглушенный бас из соседней комнаты.`
-    });
-    alert("Атмосферный план (Ambience Plan) сгенерирован!");
+  // 5. Audio Mix Plan — реальный Gemini
+  const generateAudioMixPlan = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const result = await callGemini("Создать профессиональный Audio Mix Plan: приоритеты треков, ducking, сайдчейн, мастеринг стратегия", [
+        `Платформа: ${state.selectedPlatformTarget}, LUFS цель: ${state.loudnessTarget}`,
+        `Треков музыки: ${state.importedMusic.length}, голоса: ${state.importedVoiceAudios.length}`,
+        `EQ: ${state.eqNotes || "нет"}`,
+        `SFX: ${state.sfxList.map(s => s.name).join(", ") || "нет"}`,
+      ]);
+      updateState({ isProcessing: false, audioMixPlan: result });
+    } catch (err: any) { updateState({ isProcessing: false }); alert(`Ошибка: ${err.message}`); }
   };
 
-  // 5. Audio Mix Plan
-  const generateAudioMixPlan = () => {
-    updateState({
-      audioMixPlan: "Микс должен быть плотным и агрессивным. Основной фокус на диалогах (Duck music under voice max -6dB). SFX выделены транзиентами. Лимитер настроить так, чтобы не было пиков выше -1dB True Peak."
-    });
-    alert("Микс-План успешно создан!");
-  };
-
-  const improveAudioMixPlan = () => {
+  const improveAudioMixPlan = async () => {
     if (!state.audioMixPlan) return alert("Сначала создайте микс-план!");
     updateState({ isProcessing: true });
-    setTimeout(() => {
-      updateState({
-        audioMixPlan: state.audioMixPlan + "\n\n[ИИ]: Добавлены рекомендации по параллельной компрессии на Drums buss, а также mid/side эквализация на синты, чтобы дать больше места голосу в центре.",
-        isProcessing: false
-      });
-    }, 1000);
+    try {
+      const result = await callGemini("Улучшить и расширить Audio Mix Plan — добавить детали по каждому треку", [state.audioMixPlan]);
+      updateState({ isProcessing: false, audioMixPlan: result });
+    } catch (err: any) { updateState({ isProcessing: false }); alert(`Ошибка: ${err.message}`); }
   };
 
-  // 6. Processing / Export
+  // 6. Processing — флаги (реальная DSP обработка на клиенте невозможна без WebAudio pipeline)
   const processNoiseReductionIfSupported = () => {
     updateState({ isProcessing: true });
-    setTimeout(() => {
-      updateState({ isProcessing: false, noiseReductionEnabled: true });
-      alert("Шляпа шума (Noise Print) проанализирована и удалена. Диалоги очищены!");
-    }, 1500);
+    setTimeout(() => updateState({ isProcessing: false, noiseReductionEnabled: true }), 800);
   };
 
   const normalizeVolumeIfSupported = () => {
     updateState({ isProcessing: true });
-    setTimeout(() => {
-      updateState({ isProcessing: false, normalizationEnabled: true });
-      alert("Уровни громкости нормализованы для всех диалоговых клипов (-23 LUFS).");
-    }, 1500);
+    setTimeout(() => updateState({ isProcessing: false, normalizationEnabled: true }), 800);
   };
 
-  const buildFinalAudioMixIfSupported = () => {
+  const buildFinalAudioMixIfSupported = async () => {
+    // Collect the primary audio URL from imported tracks
+    const allSrcs = [...state.importedMusic, ...state.importedVoiceAudios, ...state.uploadedAudioFiles];
+    const primary = allSrcs[0];
+
     updateState({ isProcessing: true });
-    setTimeout(() => {
-      const finalAudio: FinalMixItem = {
-        id: `fin-${Date.now()}`,
-        title: "Final_Mix_Bounce_v1.wav",
-        url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-        createdAt: new Date().toLocaleTimeString(),
-        duration: "03:15"
-      };
-      updateState({ isProcessing: false, finalAudioMix: finalAudio });
-      alert("Финальный аудио микс успешно собран!");
-      setActiveTab('mix');
-    }, 3000);
+
+    // Small delay to show loading state
+    await new Promise(r => setTimeout(r, 600));
+
+    const finalAudio: FinalMixItem = {
+      id: `fin-${Date.now()}`,
+      title: `Final_Mix_${new Date().toISOString().slice(0,10)}.wav`,
+      url: primary?.url ?? "",
+      createdAt: new Date().toLocaleTimeString(),
+      duration: primary?.duration ?? "—"
+    };
+
+    updateState({ isProcessing: false, finalAudioMix: finalAudio });
+    setActiveTab('mix');
+
+    // Save to localStorage for bridge
+    const saveData = {
+      finalAudioMix: finalAudio,
+      audioTracks: state.audioTracks,
+      loudnessTarget: state.loudnessTarget,
+      selectedPlatformTarget: state.selectedPlatformTarget,
+    };
+    localStorage.setItem('aura_audio_editor_final', JSON.stringify(saveData));
   };
 
-  // 7. ИИ-апгрейды
-  const analyzeAudioIfSupported = () => alert("Аудио проанализировано. Проблем со спектром не найдено.");
-  const proposeSoundImprovement = () => alert("ИИ предлагает добавить De-Esser на 6kHz для женского голоса.");
-  const syncAudioWithScenes = () => alert("Авто-нарезка! SFX и Cues привязаны к таймкодам сцен.");
-  const checkBalance = () => alert("Баланс: Голос звучит недостаточно ярко. Поднят ВЧ-спектр на +2dB.");
-  const prepForPlatform = () => {
-    updateState({ loudnessTarget: "-14 LUFS", selectedPlatformTarget: "youtube" });
-    alert("Аудиочастоты и лимитер адаптированы под требования алгоритма YouTube.");
+  // 7. AI кнопки — реальный Gemini
+  const analyzeAudioIfSupported = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const result = await callGemini("Проанализировать аудио микс и дать рекомендации по сведению", [
+        `Треков на таймлайне: ${state.audioTracks.length}`,
+        `EQ: ${state.eqNotes || "нет"}`, `Компрессия: ${state.compressionNotes || "нет"}`,
+        `Reverb: ${state.reverbAmount}%, Stereo: ${state.stereoWidth}%`,
+        `Платформа: ${state.selectedPlatformTarget}, LUFS: ${state.loudnessTarget}`,
+      ]);
+      updateState({ isProcessing: false, aiSuggestions: [{ id: `ai-${Date.now()}`, title: "Анализ (Gemini)", text: result, type: "analysis" }, ...state.aiSuggestions] });
+    } catch (err: any) { updateState({ isProcessing: false }); alert(`Ошибка: ${err.message}`); }
+  };
+
+  const proposeSoundImprovement = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const result = await callGemini("Предложить конкретные улучшения звука и DSP настройки", [
+        `EQ: ${state.eqNotes}`, `Компрессия: ${state.compressionNotes}`,
+        `De-Esser: ${state.deEsserNotes}`, `Reverb: ${state.reverbAmount}%, Limiter: ${state.limiterTarget}dB`,
+      ]);
+      updateState({ isProcessing: false, aiSuggestions: [{ id: `ai-${Date.now()}`, title: "Улучшение звука (Gemini)", text: result, type: "improvement" }, ...state.aiSuggestions] });
+    } catch (err: any) { updateState({ isProcessing: false }); alert(`Ошибка: ${err.message}`); }
+  };
+
+  const syncAudioWithScenes = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const result = await callGemini("Синхронизировать звук со сценами — составить план таймингов SFX и музыки", [
+        `Музыки: ${state.importedMusic.length} треков`, `Голоса: ${state.importedVoiceAudios.length} дорожек`,
+        `SFX: ${state.sfxList.map(s => s.name).join(", ") || "нет"}`,
+      ]);
+      updateState({ isProcessing: false, audioMixPlan: state.audioMixPlan ? `${state.audioMixPlan}\n\n[Синхронизация]:\n${result}` : result,
+        aiSuggestions: [{ id: `ai-${Date.now()}`, title: "Синхронизация со сценами", text: result, type: "sync" }, ...state.aiSuggestions] });
+    } catch (err: any) { updateState({ isProcessing: false }); alert(`Ошибка: ${err.message}`); }
+  };
+
+  const checkBalance = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const result = await callGemini("Проверить баланс музыка/голос, дать рекомендации по ducking и уровням", [
+        `Музыки: ${state.importedMusic.length}, Голоса: ${state.importedVoiceAudios.length}`,
+        `EQ: ${state.eqNotes}`, `Reverb: ${state.reverbAmount}%, Limiter: ${state.limiterTarget}dB`,
+        `LUFS цель: ${state.loudnessTarget}`,
+      ]);
+      updateState({ isProcessing: false, aiSuggestions: [{ id: `ai-${Date.now()}`, title: "Баланс музыка/голос (Gemini)", text: result, type: "balance" }, ...state.aiSuggestions] });
+    } catch (err: any) { updateState({ isProcessing: false }); alert(`Ошибка: ${err.message}`); }
+  };
+
+  const prepForPlatform = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const platform = state.selectedPlatformTarget ?? "youtube";
+      const result = await callGemini(`Подготовить аудио под платформу ${platform}: LUFS, True Peak, кодек, битрейт`, [
+        `Платформа: ${platform}`, `Текущий LUFS: ${state.loudnessTarget}`,
+      ]);
+      updateState({ isProcessing: false, aiSuggestions: [{ id: `ai-${Date.now()}`, title: `Подготовка под ${platform}`, text: result, type: "platform" }, ...state.aiSuggestions] });
+    } catch (err: any) { updateState({ isProcessing: false }); alert(`Ошибка: ${err.message}`); }
   };
 
   // 8. Передача дальше
-  const sendToVideoEditor = () => alert("Аудио-микс (Bounced Stems) передан в Видеоредактор на новую звуковую дорожку!");
-  const sendToExportModule = () => alert("Готовый микс направлен в Финальный Экспрот!");
+  const sendToVideoEditor = () => {
+    if (!state.finalAudioMix) { alert("Сначала соберите финальный микс!"); return; }
+    const existing = localStorage.getItem('aura_video_editor_audio');
+    const audioItem = { id: state.finalAudioMix.id, type: 'audio', url: state.finalAudioMix.url, title: state.finalAudioMix.title, duration: 60 };
+    localStorage.setItem('aura_video_editor_audio', JSON.stringify(audioItem));
+    alert(`Аудио «${state.finalAudioMix.title}» передан в Видеоредактор.`);
+  };
+
+  const sendToExportModule = () => {
+    if (!state.finalAudioMix) { alert("Сначала соберите финальный микс!"); return; }
+    localStorage.setItem('aura_export_audio', JSON.stringify(state.finalAudioMix));
+    alert(`Финальный микс передан в Экспорт.`);
+  };
+
   const saveAudioEditorModule = () => {
+    const saveData = { ...state };
+    localStorage.setItem('aura_audio_editor_state', JSON.stringify(saveData));
     alert("Состояние Аудиоредактора сохранено!");
     onApprove();
   };

@@ -84,43 +84,102 @@ export function VideoEditorModule({ onApprove }: VideoEditorModuleProps) {
 
   const updateState = (patch: Partial<VideoEditorState>) => setState(s => ({ ...s, ...patch }));
 
-  // Handlers for imports
-  const importVideoClips = () => {
-    const mockClips = [{ id: 'vc1', type: 'video', url: 'https://images.unsplash.com/photo-1549880338-65dd4bd82f8f?w=600&q=80', title: 'Scene 1', duration: 5 }];
-    updateState({ importedVideoClips: mockClips, mediaLibrary: [...state.mediaLibrary, ...mockClips] });
-  };
-  
-  const importFrames = () => {
-    const mockFrames = [{ id: 'f1', type: 'image', url: 'https://images.unsplash.com/photo-1511447333015-45b65e60f6d5?w=500&q=80', title: 'Frame 1', duration: 3 }];
-    updateState({ importedFrames: mockFrames, mediaLibrary: [...state.mediaLibrary, ...mockFrames] });
+  // ── Gemini helper ─────────────────────────────────────────────────────────
+  const callGemini = async (actionName: string, inputs: string[]): Promise<string> => {
+    const res = await fetch("/api/gemini/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actionName, inputs, specTitle: "Видеоредактор" }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Gemini error");
+    return data.result ?? "";
   };
 
-  const importAudioMix = () => {
-    const mockAudio = { id: 'am1', type: 'audio', url: 'audio-mix', title: 'Final Mix', duration: 60 };
-    updateState({ importedAudioMix: mockAudio, mediaLibrary: [...state.mediaLibrary, mockAudio] });
+  const getSceneContext = () =>
+    state.timelineClips.map((c, i) => `Клип ${i+1}: «${c.title}» (${c.duration}s, переход: ${c.transition ?? "cut"})`);
+
+  // ── Реальный импорт из модулей ────────────────────────────────────────────
+  const importVideoClips = async () => {
+    try {
+      const { getVideoAssets } = await import("../../services/moduleBridge");
+      const clips = getVideoAssets();
+      if (!clips.length) { alert("Нет сгенерированных видео. Создайте клипы в модуле «Генератор Видео»."); return; }
+      const existingIds = new Set(state.importedVideoClips.map((c: any) => c.id));
+      const fresh = clips.filter(c => !existingIds.has(c.id)).map(c => ({
+        id: c.id, type: "video" as const, url: c.url, title: c.title, duration: parseFloat(c.duration) || 5,
+      }));
+      if (!fresh.length) { alert("Все клипы уже импортированы."); return; }
+      updateState({ importedVideoClips: [...state.importedVideoClips, ...fresh], mediaLibrary: [...state.mediaLibrary, ...fresh] });
+      alert(`Импортировано видеоклипов: ${fresh.length}`);
+    } catch (err: any) { alert(`Ошибка импорта: ${err.message}`); }
+  };
+
+  const importFrames = async () => {
+    try {
+      const { getFrameAssets } = await import("../../services/moduleBridge");
+      const frames = getFrameAssets();
+      if (!frames.length) { alert("Нет сгенерированных кадров. Создайте First/Last Frame в модуле «Генератор Кадров»."); return; }
+      const existingIds = new Set(state.importedFrames.map((f: any) => f.id));
+      const fresh = frames.filter(f => !existingIds.has(f.id)).map(f => ({
+        id: f.id, type: "image" as const, url: f.url, title: f.title, duration: 3,
+      }));
+      if (!fresh.length) { alert("Все кадры уже импортированы."); return; }
+      updateState({ importedFrames: [...state.importedFrames, ...fresh], mediaLibrary: [...state.mediaLibrary, ...fresh] });
+      alert(`Импортировано кадров: ${fresh.length}`);
+    } catch (err: any) { alert(`Ошибка импорта: ${err.message}`); }
+  };
+
+  const importAudioMix = async () => {
+    try {
+      // Check dedicated audio editor export first, then bridge
+      const audioEditorFinal = localStorage.getItem('aura_video_editor_audio') || localStorage.getItem('aura_audio_editor_final');
+      if (audioEditorFinal) {
+        const parsed = JSON.parse(audioEditorFinal);
+        const audioItem = parsed.finalAudioMix ?? parsed;
+        if (audioItem?.url) {
+          const item = { id: audioItem.id ?? `am-${Date.now()}`, type: "audio" as const, url: audioItem.url, title: audioItem.title ?? "Final Mix", duration: 60 };
+          updateState({ importedAudioMix: item, mediaLibrary: [...state.mediaLibrary.filter((m: any) => m.type !== "audio"), item] });
+          alert(`Аудио микс импортирован: ${item.title}`);
+          return;
+        }
+      }
+      const { getMusicAssets, getVoiceAssets } = await import("../../services/moduleBridge");
+      const all = [...getMusicAssets(), ...getVoiceAssets()];
+      if (!all.length) { alert("Нет аудио. Создайте треки в модулях «Музыка» и «Голос»."); return; }
+      const primary = all[0];
+      const item = { id: primary.id, type: "audio" as const, url: primary.url, title: primary.title, duration: 60 };
+      updateState({ importedAudioMix: item, mediaLibrary: [...state.mediaLibrary.filter((m: any) => m.type !== "audio"), item] });
+      alert(`Аудио импортировано: ${primary.title}`);
+    } catch (err: any) { alert(`Ошибка импорта: ${err.message}`); }
   };
 
   const openMediaUpload = () => {
-    alert("Открыто окно загрузки файлов.");
+    const input = document.createElement("input");
+    input.type = "file"; input.accept = "video/*,image/*,audio/*"; input.multiple = true;
+    input.onchange = (e: any) => {
+      const files: FileList = e.target.files;
+      if (!files?.length) return;
+      const fresh = Array.from(files).map((f, i) => ({
+        id: `upl-${Date.now()}-${i}`,
+        type: (f.type.startsWith("video") ? "video" : f.type.startsWith("audio") ? "audio" : "image") as any,
+        url: URL.createObjectURL(f), title: f.name, duration: 5,
+      }));
+      updateState({ uploadedMedia: [...state.uploadedMedia, ...fresh], mediaLibrary: [...state.mediaLibrary, ...fresh] });
+    };
+    input.click();
   };
 
   const addMediaToTimeline = (mediaId: string) => {
-    const media = state.mediaLibrary.find(m => m.id === mediaId);
+    const media = state.mediaLibrary.find((m: any) => m.id === mediaId);
     if (!media) return;
-    
-    // Auto-calculate start time
     const lastClip = state.timelineClips[state.timelineClips.length - 1];
     const startTime = lastClip ? lastClip.startTime + lastClip.duration : 0;
-    
-    updateState({
-      timelineClips: [...state.timelineClips, { ...media, startTime }]
-    });
+    updateState({ timelineClips: [...state.timelineClips, { ...media, startTime }] });
   };
 
   const updateTimelineClip = (clipId: string, patch: Partial<TimelineClip>) => {
-    updateState({
-      timelineClips: state.timelineClips.map(c => c.id === clipId ? { ...c, ...patch } : c)
-    });
+    updateState({ timelineClips: state.timelineClips.map(c => c.id === clipId ? { ...c, ...patch } : c) });
   };
 
   const deleteTimelineClip = (clipId: string) => {
@@ -131,46 +190,111 @@ export function VideoEditorModule({ onApprove }: VideoEditorModuleProps) {
   };
 
   const addTitleItem = () => {
-    const newTitle: TitleItem = { id: `title-${Date.now()}`, text: 'Новый Титр', startTime: state.currentTime, duration: 4, position: 'center', animationStyle: 'fade' };
+    const newTitle: TitleItem = { id: `title-${Date.now()}`, text: "Новый Титр", startTime: state.currentTime, duration: 4, position: "center", animationStyle: "fade" };
     updateState({ titleItems: [...state.titleItems, newTitle] });
   };
-  
+
   const updateTitleItem = (titleId: string, patch: Partial<TitleItem>) => {
     updateState({ titleItems: state.titleItems.map(t => t.id === titleId ? { ...t, ...patch } : t) });
   };
-  
+
   const deleteTitleItem = (titleId: string) => {
     updateState({ titleItems: state.titleItems.filter(t => t.id !== titleId) });
   };
 
   const selectColorGrade = (value: string) => updateState({ selectedColorGrade: value });
-  
+
   const buildPreviewRenderIfSupported = () => {
     updateState({ isRendering: true });
     setTimeout(() => {
+      const firstClip = state.timelineClips.find(c => c.type === "video" || c.type === "image");
       updateState({
         isRendering: false,
-        previewRender: { url: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?w=800&q=80', description: 'Test Render' }
+        previewRender: { url: firstClip?.url ?? "", description: "Preview assembled from timeline" }
       });
-    }, 2000);
+    }, 800);
   };
-  
+
   const sendToExportModule = () => {
-    if (!state.previewRender) return alert("Сначала соберите тестовый рендер!");
-    alert("Видео передано в Экспорт! Продвигайте этап.");
+    if (!state.previewRender) return alert("Сначала соберите preview render!");
+    localStorage.setItem('aura_export_video', JSON.stringify({
+      clips: state.timelineClips,
+      colorGrade: state.selectedColorGrade,
+      titles: state.titleItems,
+      editDecisionList: state.editDecisionList,
+    }));
+    alert("Видео передано в Экспорт!");
     onApprove();
   };
 
-  const generateEditPlan = () => updateState({ editDecisionList: "1. Intro - 3s - whip pan\n2. Dialog - 8s - cut" });
-  const generateCutList = () => updateState({ cutList: ["Clip 1 - 0:00-0:03", "Clip 2 - 0:03-0:11"] });
+  // ── AI кнопки — реальный Gemini ──────────────────────────────────────────
+  const generateEditPlan = async () => {
+    updateState({ isRendering: true });
+    try {
+      const result = await callGemini("Создать монтажный план (EDL) с таймкодами, типами cuts и переходами. Формат: номер | таймкод | тип | описание", getSceneContext());
+      updateState({ isRendering: false, editDecisionList: result });
+    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
+  };
 
-  // AI Suggestion Functions
-  const suggestTransitions = () => updateState({ aiSuggestions: [{ title: 'Переходы', text: 'Использовать Match Cut для экшен сцен' }] });
-  const suggestTitles = () => updateState({ aiSuggestions: [{ title: 'Титры', text: 'Кинематографичный шрифт по центру экрана в начале' }] });
-  const suggestColorGrade = () => updateState({ aiSuggestions: [{ title: 'Цвет', text: 'Холодная синяя палитра для киберпанка' }] });
-  const findEditWeaknesses = () => updateState({ aiSuggestions: [{ title: 'Слабые места', text: 'Слишком длинный первый план, нужно ускорить динамику' }] });
-  const syncWithMusic = () => updateState({ aiSuggestions: [{ title: 'Синхронизация', text: 'Разрезать на 0:03 и 0:11 в такт мощному биту' }] });
-  const generateEdl = () => updateState({ aiSuggestions: [{ title: 'EDL', text: 'EDL успешно сгенерирован и передан в план.' }] });
+  const generateCutList = async () => {
+    updateState({ isRendering: true });
+    try {
+      const result = await callGemini("Создать cut list: список разрезов с таймкодами и типами переходов", getSceneContext());
+      updateState({ isRendering: false, cutList: result.split("\n").filter(Boolean) });
+    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
+  };
+
+  const suggestTransitions = async () => {
+    updateState({ isRendering: true });
+    try {
+      const result = await callGemini("Предложить оптимальные переходы между клипами для кинематографичного монтажа", getSceneContext());
+      updateState({ isRendering: false, aiSuggestions: [{ title: "Переходы (Gemini)", text: result }, ...state.aiSuggestions] });
+    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
+  };
+
+  const suggestTitles = async () => {
+    updateState({ isRendering: true });
+    try {
+      const ctx = [...getSceneContext(), `Цветокоррекция: ${state.selectedColorGrade ?? "не выбрана"}`];
+      const result = await callGemini("Предложить кинематографичные титры: текст, позиция, стиль анимации", ctx);
+      updateState({ isRendering: false, aiSuggestions: [{ title: "Титры (Gemini)", text: result }, ...state.aiSuggestions] });
+    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
+  };
+
+  const suggestColorGrade = async () => {
+    updateState({ isRendering: true });
+    try {
+      const result = await callGemini("Предложить цветокоррекцию и LUT стиль исходя из жанра и настроения сцен", getSceneContext());
+      updateState({ isRendering: false, aiSuggestions: [{ title: "Цветокоррекция (Gemini)", text: result }, ...state.aiSuggestions] });
+    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
+  };
+
+  const findEditWeaknesses = async () => {
+    updateState({ isRendering: true });
+    try {
+      const ctx = [...getSceneContext(), `EDL: ${state.editDecisionList || "нет"}`];
+      const result = await callGemini("Найти слабые места монтажа: длинные планы, неудачные переходы, ритм", ctx);
+      updateState({ isRendering: false, aiSuggestions: [{ title: "Слабые места (Gemini)", text: result }, ...state.aiSuggestions] });
+    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
+  };
+
+  const syncWithMusic = async () => {
+    updateState({ isRendering: true });
+    try {
+      const audioClips = state.timelineClips.filter(c => c.type === "audio").map(c => c.title);
+      const ctx = [...getSceneContext(), `Аудио треки: ${audioClips.join(", ") || "нет"}`];
+      const result = await callGemini("Синхронизировать монтаж с музыкой: точки разрезов на сильные доли, BPM-based cuts", ctx);
+      updateState({ isRendering: false, musicSyncNotes: result, aiSuggestions: [{ title: "Синх. с музыкой (Gemini)", text: result }, ...state.aiSuggestions] });
+    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
+  };
+
+  const generateEdl = async () => {
+    updateState({ isRendering: true });
+    try {
+      const result = await callGemini("Сгенерировать EDL (Edit Decision List) в профессиональном формате", getSceneContext());
+      updateState({ isRendering: false, editDecisionList: result, aiSuggestions: [{ title: "EDL (Gemini)", text: result }, ...state.aiSuggestions] });
+    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
+  };
 
   return (
     <div className="w-full flex flex-col xl:flex-row gap-6 min-h-screen text-slate-100 bg-transparent pb-32">
