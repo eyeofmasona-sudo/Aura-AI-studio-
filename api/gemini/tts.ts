@@ -58,10 +58,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const client = new GoogleGenAI({ apiKey });
 
-    const contents = [
-      types.Content.fromText(text),
-    ];
-
     const config = {
       temperature: 1,
       response_modalities: ['audio' as const],
@@ -79,7 +75,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const stream = await client.models.generateContentStream({
       model: 'gemini-3.1-flash-tts-preview',
-      contents,
+      contents: text,
       config,
     });
 
