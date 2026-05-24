@@ -183,16 +183,45 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
 
   // Handlers for Chapter / Scene
   const loadChaptersFromScript = () => {
-    const newChap: Chapter = {
-      id: Math.random().toString(),
-      chapterNumber: state.chapters.length + 1,
-      title: "Импортированная глава",
-      summary: "Краткое изложение главы из сценария.",
-      emotionalGoal: "Нарастающее напряжение",
-      visualTone: "Dark, moody",
-      isImported: true
-    };
-    setState(s => ({ ...s, chapters: [...s.chapters, newChap], selectedChapterId: newChap.id }));
+    const saved = localStorage.getItem("aura_scenario_state");
+    if (!saved) {
+      const newChap: Chapter = {
+        id: Math.random().toString(),
+        chapterNumber: state.chapters.length + 1,
+        title: "Импортированная глава (Черновик)",
+        summary: "Сохраните основной сценарий чтобы полностью загрузить данные.",
+        emotionalGoal: "Завязка конфликта",
+        visualTone: "Dark, moody",
+        isImported: true
+      };
+      setState(s => ({ ...s, chapters: [...s.chapters, newChap], selectedChapterId: newChap.id }));
+      return;
+    }
+    try {
+      const parsed = JSON.parse(saved);
+      const chs = parsed.chapters || [];
+      if (chs.length === 0) {
+        alert("В вашем сценарии нет глав.");
+        return;
+      }
+      const mappedChapters: Chapter[] = chs.map((c: any, index: number) => ({
+        id: c.id || Math.random().toString(),
+        chapterNumber: index + 1,
+        title: c.title || `Глава ${index + 1}`,
+        summary: c.summary || "Без резюме",
+        emotionalGoal: c.emotionalGoal || "Не задана",
+        visualTone: c.plotFunction || "Стандартный",
+        isImported: true
+      }));
+
+      setState(s => ({
+        ...s,
+        chapters: mappedChapters,
+        selectedChapterId: mappedChapters[0]?.id || null
+      }));
+    } catch(err) {
+      console.error("Failed to parse scenario chapters from storage:", err);
+    }
   };
 
   const createChapterManually = () => {
@@ -213,21 +242,60 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
       updateField('validationErrors', { scene: 'Выберите главу сначала' });
       return;
     }
-    const newScene: Scene = {
-      id: Math.random().toString(),
-      chapterId: state.selectedChapterId,
-      sceneNumber: state.scenes.length + 1,
-      title: "Импортированная сцена",
-      description: "Описание сцены",
-      location: "Улица",
-      characters: ["Герой"],
-      conflict: "Встреча врага",
-      emotionalBeat: "Страх переходит в уверенность",
-      visualStyleHint: "Дождь, неон",
-      continuityNotes: "Герой в плаще",
-      isImported: true
-    };
-    setState(s => ({ ...s, scenes: [...s.scenes, newScene], selectedSceneId: newScene.id, validationErrors: {} }));
+    const saved = localStorage.getItem("aura_scenario_state");
+    if (!saved) {
+      const newScene: Scene = {
+        id: Math.random().toString(),
+        chapterId: state.selectedChapterId,
+        sceneNumber: state.scenes.length + 1,
+        title: "Импортированная сцена",
+        description: "Параметры сцены",
+        location: "Улица",
+        characters: ["Арам"],
+        conflict: "Прекрасный вид",
+        emotionalBeat: "Спокойствие",
+        visualStyleHint: "Мягкий свет",
+        continuityNotes: "",
+        isImported: true
+      };
+      setState(s => ({ ...s, scenes: [...s.scenes, newScene], selectedSceneId: newScene.id, validationErrors: {} }));
+      return;
+    }
+    try {
+      const parsed = JSON.parse(saved);
+      const scs = parsed.scenes || [];
+      const chapterScenes = scs.filter((sc: any) => sc.chapterId === state.selectedChapterId);
+      if (chapterScenes.length === 0) {
+        alert("В выбранной главе нет ни одной сохраненной сцены!");
+        return;
+      }
+      
+      const mappedScenes: Scene[] = chapterScenes.map((sc: any, idx: number) => ({
+        id: sc.id || Math.random().toString(),
+        chapterId: sc.chapterId || state.selectedChapterId!,
+        sceneNumber: idx + 1,
+        title: sc.title || `Сцена ${idx + 1}`,
+        description: sc.action || sc.description || "Действие не задано",
+        location: sc.location || "Виноградники",
+        characters: typeof sc.characters === 'string' 
+          ? sc.characters.split(',').map((u: string) => u.trim()).filter(Boolean)
+          : (Array.isArray(sc.characters) ? sc.characters : []),
+        conflict: sc.conflict || "",
+        emotionalBeat: sc.emotionalBeat || "",
+        visualStyleHint: sc.visualNotes || "",
+        continuityNotes: sc.audioNotes || "",
+        isImported: true
+      }));
+
+      setState(s => ({
+        ...s,
+        scenes: [...s.scenes.filter(oldSc => oldSc.chapterId !== state.selectedChapterId), ...mappedScenes],
+        selectedSceneId: mappedScenes[0]?.id || null,
+        validationErrors: {}
+      }));
+    } catch (err) {
+      console.error("Failed to parse scenario scenes from storage:", err);
+    }
   };
 
   const createSceneManually = () => {
@@ -253,10 +321,106 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
   };
 
   const importScript = () => {
-    updateField('importedScript', true);
-    loadChaptersFromScript();
+    const saved = localStorage.getItem("aura_scenario_state");
+    if (!saved) {
+      alert("Сценарий не обнаружен в локальном сейфе. Пожалуйста, откройте вкладку «Сценарий», заполните её контентом и нажмите кнопку «Сохранить»!");
+      return;
+    }
+    try {
+      const parsed = JSON.parse(saved);
+      const chs = parsed.chapters || [];
+      const scs = parsed.scenes || [];
+
+      if (chs.length === 0) {
+        alert("Импортируемый сценарий пуст. Создайте структуру глав во вкладке «Сценарий».");
+        return;
+      }
+
+      const mappedChapters: Chapter[] = chs.map((c: any, index: number) => ({
+        id: c.id || Math.random().toString(),
+        chapterNumber: index + 1,
+        title: c.title || `Глава ${index + 1}`,
+        summary: c.summary || "Резюме главы отсутствует",
+        emotionalGoal: c.emotionalGoal || "",
+        visualTone: c.plotFunction || "Драматический",
+        isImported: true
+      }));
+
+      const mappedScenes: Scene[] = scs.map((sc: any, index: number) => ({
+        id: sc.id || Math.random().toString(),
+        chapterId: sc.chapterId || "",
+        sceneNumber: index + 1,
+        title: sc.title || `Сцена ${index + 1}`,
+        description: sc.action || sc.description || "Описание сцены",
+        location: sc.location || "Пленэр",
+        characters: typeof sc.characters === 'string'
+          ? sc.characters.split(',').map((char: string) => char.trim()).filter(Boolean)
+          : (Array.isArray(sc.characters) ? sc.characters : []),
+        conflict: sc.conflict || "",
+        emotionalBeat: sc.emotionalBeat || "",
+        visualStyleHint: sc.visualNotes || "",
+        continuityNotes: sc.audioNotes || "",
+        isImported: true
+      }));
+
+      // Automatically construct the Shot List frames with imported scenes so generating is plug-and-play
+      const mappedFrames: Frame[] = mappedScenes.map((sc: any, index: number) => ({
+        id: sc.id,
+        chapterId: sc.chapterId,
+        sceneId: sc.id,
+        number: `#${index + 1}`,
+        title: sc.title || `Кадр ${index + 1}`,
+        action: sc.description || "Описать действие в кадре",
+        characters: Array.isArray(sc.characters) ? sc.characters.join(', ') : (sc.characters || ""),
+        location: sc.location || "",
+        emotionalGoal: sc.emotionalBeat || "",
+        continuityNotes: sc.continuityNotes || "",
+        selectedImageId: null,
+        firstFrameAnchorId: null,
+        lastFrameAnchorId: null
+      }));
+
+      setState(s => ({
+        ...s,
+        importedScript: parsed,
+        chapters: mappedChapters,
+        scenes: mappedScenes,
+        frames: mappedFrames,
+        selectedChapterId: mappedChapters[0]?.id || null,
+        selectedSceneId: mappedScenes.find(sn => sn.chapterId === mappedChapters[0]?.id)?.id || null,
+        selectedFrameId: mappedFrames[0]?.id || null,
+        validationErrors: {}
+      }));
+      alert(`Сценарий успешно синхронизирован! Загружено: Глава ${mappedChapters.length}, Сцен: ${mappedScenes.length}. Shot List инициализирован.`);
+    } catch(err) {
+      console.error(err);
+      alert("Ошибка при разборе файла сценария из локального кэша.");
+    }
   };
-  const importCharacters = () => updateField('importedCharacters', [{ id: '1', name: 'Главный герой' }, { id: '2', name: 'Враг' }]);
+
+  const importCharacters = () => {
+    const saved = localStorage.getItem("aura_character_state");
+    if (!saved) {
+      alert("База персонажей пуста. Пожалуйста, посетите вкладку «Персонажи», добавьте своих персонажей и зафиксируйте их параметры перед импортом!");
+      return;
+    }
+    try {
+      const parsed = JSON.parse(saved);
+      const chars = parsed.characters || parsed || [];
+      if (chars.length === 0) {
+        alert("В локальной памяти не обнаружено сохраненных карточек персонажей.");
+        return;
+      }
+      setState(s => ({
+        ...s,
+        importedCharacters: chars
+      }));
+      alert(`Персонажи (${chars.length}) успешно импортированы! Теперь они доступны как удобные быстрые кнопки под источниками.`);
+    } catch(err) {
+      console.error(err);
+      alert("Ошибка декодирования профилей персонажей.");
+    }
+  };
 
   const selectChapter = (value: string) => {
     updateField('selectedChapterId', value);
@@ -313,31 +477,43 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
     // Scene Context
     if (state.selectedChapterId) {
       const chapter = state.chapters.find(c => c.id === state.selectedChapterId);
-      if (chapter) prompt += `Chapter Context: ${chapter.visualTone}. `;
+      if (chapter) prompt += `Chapter Context: ${chapter.visualTone || chapter.summary}. `;
     }
     if (state.selectedSceneId) {
       const scene = state.scenes.find(s => s.id === state.selectedSceneId);
-      if (scene) prompt += `Scene: ${scene.title}. ${scene.visualStyleHint || ''}. Location: ${scene.location}. `;
+      if (scene) prompt += `Scene Description: ${scene.description || scene.title}. Location: ${scene.location}. Style Hint: ${scene.visualStyleHint || ''}. `;
+    }
+
+    // Frame particulars
+    if (state.selectedFrameId) {
+      const frame = state.frames.find(f => f.id === state.selectedFrameId);
+      if (frame) {
+        if (frame.action) prompt += `Shot Action: ${frame.action}. `;
+        if (frame.characters) prompt += `Characters present: ${frame.characters}. `;
+        if (frame.location) prompt += `Environment: ${frame.location}. `;
+        if (frame.emotionalGoal) prompt += `Mood: ${frame.emotionalGoal}. `;
+      }
     }
 
     if (state.manualFrameDescription) {
-      prompt += `Frame Specifics: ${state.manualFrameDescription}. `;
-    } else {
-      const frame = state.frames.find(f => f.id === state.selectedFrameId);
-      if (frame && frame.action) prompt += `Frame Specifics: ${frame.action}. `;
+      prompt += `Details: ${state.manualFrameDescription}. `;
     }
 
     // Parameters
-    const params = [
-      state.selectedShotType,
-      state.selectedCameraAngle,
-      state.selectedLighting,
-      state.selectedVisualStyle,
-      state.selectedRealismLevel,
-      state.selectedColorPalette ? `${state.selectedColorPalette} colors` : null
-    ].filter(Boolean).join(", ");
+    const paramsList = [
+      state.selectedShotType ? `shot type: ${state.selectedShotType}` : null,
+      state.selectedCameraAngle ? `angle: ${state.selectedCameraAngle}` : null,
+      state.selectedCameraMovement ? `camera movement: ${state.selectedCameraMovement}` : null,
+      state.selectedLighting ? `lighting: ${state.selectedLighting}` : null,
+      state.selectedVisualStyle ? `style: ${state.selectedVisualStyle}` : null,
+      state.selectedRealismLevel ? `realism: ${state.selectedRealismLevel}` : null,
+      state.selectedColorPalette ? `color palette: ${state.selectedColorPalette}` : null,
+      state.selectedAspectRatio ? `aspect ratio: ${state.selectedAspectRatio}` : null
+    ].filter(Boolean);
 
-    if (params) prompt += ` Style and Composition: ${params}.`;
+    if (paramsList.length > 0) {
+      prompt += ` Cinematic details: ${paramsList.join(", ")}.`;
+    }
 
     updateField('imagePrompt', prompt.trim() || 'Cinematic shot, highly detailed.');
   };
@@ -346,38 +522,55 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
   const getChapterName = () => state.chapters.find(c => c.id === state.selectedChapterId)?.title || "Unknown Chapter";
 
   const generateWithParams = (type: 'standard' | 'first-frame' | 'last-frame' | 'nano-banana') => {
-    if (!state.selectedSceneId && type !== 'standard') {
-      alert("Please select a scene first!");
-      return;
-    }
     setState(s => ({ ...s, isGenerating: true }));
     setTimeout(() => {
       const newImages: GeneratedImage[] = [];
       const numVars = state.selectedVariationCount || 1;
       
-      const selectedStyle = state.selectedImageStyle || "Кинематографичный";
-      const englishStyle = selectedStyle === "Реализм" ? "photorealistic film scene" 
-                         : selectedStyle === "Кинематографичный" ? "epic dramatic cinematic wide shot film scene"
-                         : selectedStyle === "Анимационный" ? "anime series screenshot dynamic keyframe"
-                         : selectedStyle === "Концепт-арт" ? "stylized digital concept art illustration"
-                         : selectedStyle === "Комикс" ? "retro colored graphic novel comic panel"
-                         : selectedStyle === "Нуар" ? "black and white cinematic moody film noir scene"
-                         : selectedStyle === "Фэнтези" ? "magical illustration conceptual art scene"
-                         : selectedStyle === "Киберпанк" ? "neon lit cyberpunk street scene keyframe"
-                         : `${selectedStyle.toLowerCase()} styling, cinema shot scene`;
+      const selectedStyle = state.selectedVisualStyle || "cinematic realism";
+      const englishStyle = selectedStyle === "cinematic realism" ? "epic dramatic cinematic wide shot film scene"
+                         : selectedStyle === "stylized realism" ? "photorealistic styled film scene"
+                         : selectedStyle === "concept art" ? "stylized digital concept art illustration"
+                         : selectedStyle === "noir" ? "black and white cinematic moody film noir scene"
+                         : selectedStyle === "cyberpunk" ? "neon-lit cyberpunk street scene keyframe"
+                         : selectedStyle === "fantasy" ? "magical illustration conceptual art scene"
+                         : selectedStyle === "commercial glossy" ? "high-end commercial professional studio lighting glossy keyframe"
+                         : selectedStyle === "documentary realism" ? "realistic raw documentary camera photo style"
+                         : selectedStyle === "animation-inspired" ? "anime series screenshot dynamic keyframe"
+                         : `${selectedStyle} styled movie theme`;
+
+      // Build parameters list dynamically so they are always guaranteed in the prompt
+      const paramsList = [
+        state.selectedShotType ? `shot type: ${state.selectedShotType}` : null,
+        state.selectedCameraAngle ? `angle: ${state.selectedCameraAngle}` : null,
+        state.selectedCameraMovement ? `camera movement: ${state.selectedCameraMovement}` : null,
+        state.selectedLighting ? `lighting: ${state.selectedLighting}` : null,
+        state.selectedRealismLevel ? `realism: ${state.selectedRealismLevel}` : null,
+        state.selectedColorPalette ? `colors: ${state.selectedColorPalette}` : null,
+        state.selectedAspectRatio ? `aspect ratio: ${state.selectedAspectRatio}` : null,
+      ].filter(Boolean);
+
+      const paramsSuffix = paramsList.length > 0 ? `, style nuances: ${paramsList.join(", ")}` : "";
 
       for(let i=0; i<numVars; i++) {
         const seedValue = Math.floor(Math.random() * 999999999).toString();
-        const cleanPrompt = `${englishStyle}, ${state.imagePrompt || "epic movie set background"}, cinematic lighting, detailed, 8k, aspect ratio 16:9`
-          .replace(/[^a-zA-Z0-9,\s\-]/g, "")
-          .substring(0, 320);
+        // Fallback context if prompt is empty
+        let basePrompt = state.imagePrompt;
+        if (!basePrompt.trim()) {
+          const currentFrame = state.frames.find(fr => fr.id === state.selectedFrameId);
+          basePrompt = currentFrame?.action || "cinematic shot, highly detailed composition";
+        }
+
+        const cleanPrompt = `${englishStyle}, ${basePrompt}${paramsSuffix}, highly detailed, 8k`
+          .replace(/[^a-zA-Z0-9,\s\-:()]/g, "")
+          .substring(0, 400);
 
         const imageUrl = `https://image.pollinations.ai/p/${encodeURIComponent(cleanPrompt)}?width=1024&height=1024&nologo=true&seed=${seedValue}`;
 
         newImages.push({
           id: Math.random().toString(),
           url: imageUrl,
-          prompt: state.imagePrompt || "Сцена",
+          prompt: basePrompt,
           frameType: type,
           sceneName: getSceneName(),
           chapterName: getChapterName()
@@ -404,34 +597,46 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
   };
 
   const generateFirstLastPair = () => {
-    if (!state.selectedSceneId) {
-      alert("Please select a scene first to generate a pair!");
-      return;
-    }
     setState(s => ({ ...s, isGenerating: true }));
     setTimeout(() => {
       const pairId = Math.random().toString();
       const seed1 = Math.floor(Math.random() * 999999999).toString();
       const seed2 = Math.floor(Math.random() * 999999999).toString();
-      const selectedStyle = state.selectedImageStyle || "Кинематографичный";
+      const selectedStyle = state.selectedVisualStyle || "cinematic realism";
 
-      const englishStyle = selectedStyle === "Реализм" ? "photorealistic film scene" 
-                         : selectedStyle === "Кинематографичный" ? "epic dramatic cinematic wide shot film scene"
-                         : selectedStyle === "Анимационный" ? "anime series screenshot dynamic keyframe"
-                         : selectedStyle === "Концепт-арт" ? "stylized digital concept art illustration"
-                         : selectedStyle === "Комикс" ? "retro colored graphic novel comic panel"
-                         : selectedStyle === "Нуар" ? "black and white cinematic moody film noir scene"
-                         : selectedStyle === "Фэнтези" ? "magical illustration conceptual art scene"
-                         : selectedStyle === "Киберпанк" ? "neon lit cyberpunk street scene keyframe"
-                         : `${selectedStyle.toLowerCase()} styling, cinema shot scene`;
+      const englishStyle = selectedStyle === "cinematic realism" ? "epic dramatic cinematic wide shot film scene"
+                         : selectedStyle === "stylized realism" ? "photorealistic styled film scene"
+                         : selectedStyle === "concept art" ? "stylized digital concept art illustration"
+                         : selectedStyle === "noir" ? "black and white cinematic moody film noir scene"
+                         : selectedStyle === "cyberpunk" ? "neon-lit cyberpunk street scene keyframe"
+                         : selectedStyle === "fantasy" ? "magical illustration conceptual art scene"
+                         : selectedStyle === "commercial glossy" ? "high-end commercial professional studio lighting glossy keyframe"
+                         : selectedStyle === "documentary realism" ? "realistic raw documentary camera photo style"
+                         : selectedStyle === "animation-inspired" ? "anime series screenshot dynamic keyframe"
+                         : `${selectedStyle} styled movie theme`;
 
-      const cleanPromptFirst = `keyframe start of scene, ${englishStyle}, ${state.imagePrompt || "atmospheric start scene"}, cinematic lighting, detailed, 8k`
-        .replace(/[^a-zA-Z0-9,\s\-]/g, "")
-        .substring(0, 320);
+      // Build parameters list dynamically so they are always guaranteed in the prompt
+      const paramsList = [
+        state.selectedShotType ? `shot type: ${state.selectedShotType}` : null,
+        state.selectedCameraAngle ? `angle: ${state.selectedCameraAngle}` : null,
+        state.selectedCameraMovement ? `camera movement: ${state.selectedCameraMovement}` : null,
+        state.selectedLighting ? `lighting: ${state.selectedLighting}` : null,
+        state.selectedRealismLevel ? `realism: ${state.selectedRealismLevel}` : null,
+        state.selectedColorPalette ? `colors: ${state.selectedColorPalette}` : null,
+        state.selectedAspectRatio ? `aspect ratio: ${state.selectedAspectRatio}` : null,
+      ].filter(Boolean);
 
-      const cleanPromptLast = `keyframe end of scene, dynamic climax, ${englishStyle}, ${state.imagePrompt || "atmospheric end scene"}, cinematic lighting, detailed, 8k`
-        .replace(/[^a-zA-Z0-9,\s\-]/g, "")
-        .substring(0, 320);
+      const paramsSuffix = paramsList.length > 0 ? `, style nuances: ${paramsList.join(", ")}` : "";
+
+      const basePrompt = state.imagePrompt || "atmospheric scene keyframe";
+
+      const cleanPromptFirst = `keyframe start of scene, ${englishStyle}, ${basePrompt}${paramsSuffix}, cinematic lighting, detailed, 8k`
+        .replace(/[^a-zA-Z0-9,\s\-:()]/g, "")
+        .substring(0, 400);
+
+      const cleanPromptLast = `keyframe end of scene, dynamic climax, ${englishStyle}, ${basePrompt}${paramsSuffix}, cinematic lighting, detailed, 8k`
+        .replace(/[^a-zA-Z0-9,\s\-:()]/g, "")
+        .substring(0, 400);
 
       const firstPairImg: GeneratedImage = {
         id: Math.random().toString(),
@@ -569,6 +774,35 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
               </button>
             </div>
 
+            {state.importedCharacters && state.importedCharacters.length > 0 && (
+              <div className="flex flex-col gap-2 p-3 bg-black/30 border border-[#b026ff]/20 rounded-xl">
+                <span className="text-[10px] uppercase font-bold tracking-widest text-[#b026ff]">Быстрый выбор персонажей для кадра:</span>
+                <div className="flex flex-wrap gap-2">
+                  {state.importedCharacters.map((char: any) => {
+                    const charName = char.fullName || char.name || "Персонаж";
+                    const charTraits = char.clothesType || char.clothing || char.appearance || "standard look";
+                    return (
+                      <button
+                        key={char.id}
+                        onClick={() => {
+                          const desc = `${charName} (${charTraits})`;
+                          const existing = state.manualFrameDescription || "";
+                          const updated = existing.includes(charName) 
+                            ? existing 
+                            : (existing ? `${existing}, with ${desc}` : desc);
+                          updateField('manualFrameDescription', updated);
+                        }}
+                        className="px-3 py-1.5 rounded-full bg-[#b026ff]/10 border border-[#b026ff]/30 text-xs text-[#b026ff] hover:bg-[#b026ff]/20 transition-colors flex items-center gap-1.5"
+                      >
+                        <User className="w-3 h-3 text-[#b026ff]" />
+                        <span className="font-medium">{charName}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {/* Выбор Главы */}
             <div className="flex flex-col gap-4 bg-black/30 border border-slate-800 p-4 rounded-xl">
               <div className="flex items-center justify-between">
@@ -591,13 +825,13 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
                 </div>
                 {state.selectedChapterId && (
                   <div className="flex-1 bg-black/40 border border-slate-800 rounded-lg p-3 grid grid-cols-2 gap-4 text-xs text-slate-400">
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 max-w-full">
                       <strong className="text-slate-200">Резюме:</strong>
-                      <span className="truncate">{state.chapters.find(c => c.id === state.selectedChapterId)?.summary || "—"}</span>
+                      <span className="whitespace-pre-wrap leading-relaxed block max-h-[150px] overflow-y-auto pr-1">{state.chapters.find(c => c.id === state.selectedChapterId)?.summary || "—"}</span>
                     </div>
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 max-w-full">
                       <strong className="text-slate-200">Тон:</strong>
-                      <span>{state.chapters.find(c => c.id === state.selectedChapterId)?.visualTone || "—"}</span>
+                      <span className="whitespace-pre-wrap leading-relaxed block max-h-[150px] overflow-y-auto pr-1">{state.chapters.find(c => c.id === state.selectedChapterId)?.visualTone || "—"}</span>
                     </div>
                   </div>
                 )}
@@ -628,17 +862,17 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
                 </div>
                 {state.selectedSceneId && (
                   <div className="flex-1 bg-black/40 border border-slate-800 rounded-lg p-3 grid grid-cols-2 md:grid-cols-4 gap-4 text-xs text-slate-400">
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 max-w-full">
                       <strong className="text-slate-200">Локация:</strong>
-                      <span className="truncate">{state.scenes.find(s => s.id === state.selectedSceneId)?.location || "—"}</span>
+                      <span className="whitespace-pre-wrap leading-relaxed block max-h-[150px] overflow-y-auto pr-1">{state.scenes.find(s => s.id === state.selectedSceneId)?.location || "—"}</span>
                     </div>
-                    <div className="flex flex-col gap-1">
+                    <div className="flex flex-col gap-1 max-w-full">
                       <strong className="text-slate-200">Стиль:</strong>
-                      <span className="truncate">{state.scenes.find(s => s.id === state.selectedSceneId)?.visualStyleHint || "—"}</span>
+                      <span className="whitespace-pre-wrap leading-relaxed block max-h-[150px] overflow-y-auto pr-1">{state.scenes.find(s => s.id === state.selectedSceneId)?.visualStyleHint || "—"}</span>
                     </div>
-                    <div className="flex flex-col gap-1 col-span-2">
+                    <div className="flex flex-col gap-1 col-span-2 max-w-full">
                       <strong className="text-slate-200">Описание:</strong>
-                      <span className="truncate">{state.scenes.find(s => s.id === state.selectedSceneId)?.description || "—"}</span>
+                      <span className="whitespace-pre-wrap leading-relaxed block max-h-[150px] overflow-y-auto pr-1">{state.scenes.find(s => s.id === state.selectedSceneId)?.description || "—"}</span>
                     </div>
                   </div>
                 )}

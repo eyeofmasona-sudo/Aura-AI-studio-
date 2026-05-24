@@ -335,6 +335,66 @@ export function ScenarioModule({ onApprove, isApproved }: ScenarioModuleProps) {
   };
 
   // AI Helpers
+  const getTimingConstraint = (duration: string | null) => {
+    if (!duration) {
+      return {
+        totalSeconds: 30,
+        estimatedBlocks: 4,
+        text: "Длительность по умолчанию: 30 секунд. Раздели сюжет ровно на 4 видео-кадра/сцены делением по ~7-8 секунд каждый для генератора Veo (так как один ролик Veo длится ровно 8 секунд)."
+      };
+    }
+    
+    // Parse duration strings to estimated 8-second video segments
+    if (duration.includes("15")) {
+      return {
+        totalSeconds: 15,
+        estimatedBlocks: 2,
+        text: "Длительность: ровно 15 секунд. Раздели сюжет ровно на 2 видео-кадра/сцены по ~7-8 секунд каждый для генератора Veo (так как одно видео Veo генерирует ровно 8 секунд). Хронометраж структуры не должен превышать 15 секунд!"
+      };
+    }
+    if (duration.includes("30")) {
+      return {
+        totalSeconds: 30,
+        estimatedBlocks: 4,
+        text: "Длительность: ровно 30 секунд. Раздели сюжет ровно на 4 видео-кадра/сцены по ~7-8 секунд каждый для генератора Veo (так как одно видео Veo генерирует ровно 8 секунд). Хронометраж структуры не должен превышать 30 секунд!"
+      };
+    }
+    if (duration.includes("60")) {
+      return {
+        totalSeconds: 60,
+        estimatedBlocks: 8,
+        text: "Длительность: ровно 60 секунд. Раздели сюжет ровно на 8 видео-кадров/сцен по ~7-8 секунд каждый для генератора Veo (так как одно видео Veo генерирует ровно 8 секунд). Хронометраж структуры не должен превышать 60 секунд!"
+      };
+    }
+    if (duration.includes("90")) {
+      return {
+        totalSeconds: 90,
+        estimatedBlocks: 11,
+        text: "Длительность: ровно 90 секунд. Раздели сюжет ровно на 11 видео-кадров/сцен по ~8 секунд каждый для генератора Veo. Хронометраж структуры не должен превышать 90 секунд!"
+      };
+    }
+    if (duration.includes("3 мин")) {
+      return {
+        totalSeconds: 180,
+        estimatedBlocks: 22,
+        text: "Длительность: ровно 180 секунд (3 минуты). Раздели сюжет ровно на 22 видео-кадра/сцены по ~8 секунд каждый для генератора Veo. Хронометраж структуры не должен превышать 180 секунд!"
+      };
+    }
+    if (duration.includes("5 мин")) {
+      return {
+        totalSeconds: 300,
+        estimatedBlocks: 37,
+        text: "Длительность: ровно 300 секунд (5 минут). Раздели сюжет ровно на 37 видео-кадров/сцен по ~8 секунд каждый для генератора Veo."
+      };
+    }
+    
+    return {
+      totalSeconds: 30,
+      estimatedBlocks: 4,
+      text: `Выбранная длительность: ${duration}. Раздели сюжет на видео-фрагменты по ~8 секунд каждый (так как одно видео Veo генерирует ровно 8 секунд).`
+    };
+  };
+
   const generateRobustFallbackChapters = (draft: string): Chapter[] => {
     // Try to split drafted ideas into sentences or paragraphs for rich realistic segments
     const lines = draft.split('\n')
@@ -358,7 +418,10 @@ export function ScenarioModule({ onApprove, isApproved }: ScenarioModuleProps) {
       ];
     }
 
-    const chaptersCount = Math.min(5, Math.max(3, parts.length));
+    const durationObj = getTimingConstraint(state.selectedDuration);
+    // Suggest optimal chapter count based on block count
+    const chaptersCount = durationObj.estimatedBlocks <= 2 ? 2 : durationObj.estimatedBlocks <= 4 ? 3 : Math.min(5, Math.max(3, parts.length));
+    
     const result: Chapter[] = [];
     const plotFunctions = ["экспозиция", "завязка", "развитие", "кульминация", "развязка"];
     const emotionalGoals = ["Любопытство", "Напряжение", "Опасение", "Интрига", "Катарсис"];
@@ -380,25 +443,33 @@ export function ScenarioModule({ onApprove, isApproved }: ScenarioModuleProps) {
   const generateChaptersFromIdea = () => {
     const draftText = state.scriptDraft || state.importedIdeaPrompt || "No idea draft provided";
     setIsGeneratingChapters(true);
+    const durationObj = getTimingConstraint(state.selectedDuration);
     
-    const customPrompt = `Разбей данную идею или сценарий на 3-5 глав в формате JSON. Текст идеи:\n${draftText}`;
+    // Suggest optimal chapter count based on block count
+    const targetChaptersCount = durationObj.estimatedBlocks <= 2 ? 2 : durationObj.estimatedBlocks <= 4 ? 3 : 4;
+
+    const customPrompt = `Разбей данную идею или сценарий на ${targetChaptersCount} главы в формате JSON.
+Требование по хронометражу всего проекта: ${durationObj.text}
+Пожалуйста, учти, что весь сценарий длится ровно ${durationObj.totalSeconds} секунд и будет состоять из ${durationObj.estimatedBlocks} сцен/кадров по ~8 секунд каждый.
+Распредели эти 8-секундные сцены пропорционально между этими ${targetChaptersCount} главами.
+Текст идеи:\n${draftText}`;
     
     const sysInstruction = `You are a professional Creative Story Producer inside Aura AI Studio.
-Given the movie or video concept, divide it logically into 3 to 5 sequential chapters that form a complete narrative arc.
+Given the movie or video concept and its total duration of ${durationObj.totalSeconds} seconds, divide it logically into exactly ${targetChaptersCount} sequential chapters that form a complete narrative arc.
 You must return ONLY a raw valid JSON array of objects representing chapters. Do NOT wrap in markdown code blocks (\`\`\`json or \`\`\`), do NOT output any conversational text, greetings, or explanations.
 
 Each object in the JSON array must contain exactly these keys:
 - "title": string (the chapter title in Russian, e.g., "Глава 1: Пробуждение зверя")
-- "summary": string (a concise outline summary of the events in Russian)
-- "emotionalGoal": string (emotional color or key feeling of this chapter in Russian)
+- "summary": string (a concise outline summary of what happens in Russian)
+- "emotionalGoal": string (emotional color or key feeling of this chapter in Russian, e.g. "Любопытство", "Напряжение")
 - "plotFunction": string (its role in the plot in Russian, e.g. "экспозиция", "завязка", "развитие", "кульминация", "развязка")
 
 Example output to follow precisely:
 [
   {
     "title": "Глава 1: Пример",
-    "summary": "Пример описания...",
-    "emotionalGoal": "Пример эмоции...",
+    "summary": "Пример описания событий в рамках главы...",
+    "emotionalGoal": "Любопытство",
     "plotFunction": "экспозиция"
   }
 ]`;
@@ -453,26 +524,32 @@ Example output to follow precisely:
     }
 
     setIsGeneratingStructure(true);
+    const durationObj = getTimingConstraint(state.selectedDuration);
 
     const customPrompt = `На основе данного черновика/идеи проекта определи лучшую структуру повествования (одну из: "3 акта", "5 актов", "Hero’s Journey", "Save the Cat", "Короткий рекламный сценарий", "Клип/монтажная структура", "Документальная структура", "Эпизодическая структура").
-Затем составь пошаговую структуру/акт за актом с кратким разбором каждого этапа.
+Требование по хронометражу всего проекта: ${durationObj.text}
+Пожалуйста, составь структуру так, чтобы общее время составляло ровно ${durationObj.totalSeconds} секунд, разделенное на ровно ${durationObj.estimatedBlocks} кадров/эпизодов по 8 секунд каждый (так как генератор Veo создает именно 8-секундные кусочки). Укажи таймкод каждого кадра (например, 0:00-0:08, 0:08-0:16 и т.д.).
 Текст идеи/проекта:
 ${draftText}`;
 
-    const sysInstruction = `You are a high-level Creative Story Consultant inside Aura AI Studio. Analyze the provided project draft/idea.
+    const sysInstruction = `You are a high-level Creative Story Consultant inside Aura AI Studio. Analyze the provided project draft/idea and its timing constraints.
 First, choose the single best-fitting structure from this exact Russian list:
 ["3 акта", "5 актов", "Hero’s Journey", "Save the Cat", "Короткий рекламный сценарий", "Клип/монтажная структура", "Документальная структура", "Эпизодическая структура"]
 
+Crucial rule: Divide the story into EXACTLY ${durationObj.estimatedBlocks} sequential scenes/blocks of exactly 8 seconds each to fill the total budget of ${durationObj.totalSeconds} seconds (since Veo generates 8-second clips). Label each section with its precise video timestamp (e.g. 0:00-0:08, 0:08-0:16, 0:16-0:24, 0:24-0:30).
+
 Your output must consist of TWO parts separated by a marker "---DELIMITER---":
 Part 1: The exact structure name chosen from the list above. Do NOT include any punctuation, quotes, or markdown. Only the raw string.
-Part 2: A beautiful step-by-step screenplay structure planning (in Russian) detailing how each section/act applies to this story. Keep it extremely structured and helpful.
+Part 2: A beautiful step-by-step screenplay structure planning (in Russian) detailing how each section/act applies to this story. Keep it extremely structured and helpful, outlining exactly ${durationObj.estimatedBlocks} blocks of ~8 seconds each!
 
-Example format:
-Save the Cat
+Example format for 30s duration:
+Короткий рекламный сценарий
 ---DELIMITER---
-1. Opening Image (Рекомендуемый кадр): Исходное состояние...
-2. Theme Stated: Обозначение темы...
-3. Set-Up: Основные вводные...`;
+### Пошаговая структура 30-секундного ролика (4 кадра по 8 секунд):
+* **Кадр 1 (0:00 - 0:08):** Завязка сюжета...
+* **Кадр 2 (0:08 - 0:16):** Развитие конфликта...
+* **Кадр 3 (0:16 - 0:24):** Пик напряжения...
+* **Кадр 4 (0:24 - 0:30):** Финал и пэкшот...`;
 
     runAiAction('Анализ структуры сценария', customPrompt, (res) => {
       try {
@@ -534,8 +611,15 @@ Save the Cat
       "СТУДИЯ - ИНТЕРЬЕР - НОЧЬ"
     ];
 
-    const count = Math.min(3, Math.max(2, summaries.length));
-    for (let i = 0; i < count; i++) {
+    const durationObj = getTimingConstraint(state.selectedDuration);
+    const chapterIndex = state.chapters.findIndex(c => c.id === chapter.id);
+    const totalChapters = state.chapters.length || 1;
+    const baseScenesCount = Math.floor(durationObj.estimatedBlocks / totalChapters);
+    const remainder = durationObj.estimatedBlocks % totalChapters;
+    const targetScenes = baseScenesCount + (chapterIndex >= 0 && chapterIndex < remainder ? 1 : 0);
+    const finalScenesLimit = Math.max(1, targetScenes);
+
+    for (let i = 0; i < finalScenesLimit; i++) {
       const text = summaries[Math.min(i, summaries.length - 1)] || "Развитие ключевых событий в рамках сцены и раскрытие конфликта.";
       const cleanTitle = text.split(/[,:;.]/)[0].substring(0, 30).trim();
       result.push({
@@ -564,15 +648,30 @@ Save the Cat
     }
 
     setIsGeneratingScenes(true);
+    const durationObj = getTimingConstraint(state.selectedDuration);
 
-    const customPrompt = `Сгенерируй последовательные драматические сцены для главы "${selectedCh.title}". Описание главы: ${selectedCh.summary}. Идея всего проекта: ${state.scriptDraft || "не указана"}`;
+    const chapterIndex = state.chapters.indexOf(selectedCh);
+    const totalChapters = state.chapters.length || 1;
+    const baseScenesCount = Math.floor(durationObj.estimatedBlocks / totalChapters);
+    const remainder = durationObj.estimatedBlocks % totalChapters;
+    const targetScenesForThisChapter = baseScenesCount + (chapterIndex < remainder ? 1 : 0);
+    const finalScenesLimit = Math.max(1, targetScenesForThisChapter);
+
+    const customPrompt = `Сгенерируй последовательные драматические сцены для главы "${selectedCh.title}".
+Описание главы: ${selectedCh.summary}. 
+Требование по хронометражу всего проекта: ${durationObj.text}
+Хронометраж конкретно этой главы должен состоять ровно из ${finalScenesLimit} сцен/кадров (каждая сцена - ровно один 8-секундный видеоролик для генератора Veo).
+Общее количество сцен во всех главах должно составить ровно ${durationObj.estimatedBlocks} сцен.
+Идея всего проекта: ${state.scriptDraft || "не указана"}`;
     
-    const sysInstruction = `You are an expert Cinema Scriptwriter. Given a chapter summary and details, break it down logically into 2 to 4 sequential dramatic scenes.
+    const sysInstruction = `You are an expert Cinema Scriptwriter. Given a chapter summary and details, break it down logically into EXACTLY ${finalScenesLimit} sequential dramatic scenes/shots.
+CRITICAL DIRECTIVE: Every scene represents exactly ONE 8-second video clip generator slot. You must output exactly ${finalScenesLimit} distinct scenes. Each scene should specify what happens during its 8-second window.
+
 You must return ONLY a raw valid JSON array of objects representing scenes. Do NOT wrap in markdown code blocks (\`\`\`json or \`\`\`), do NOT output any conversational text, greetings, or explanations.
 
 Each object in the JSON array must contain exactly these keys:
 - "title": string (the scene title in Russian, e.g., "Сцена 1: Неожиданная весть")
-- "description": string (detailed scene description setting the dramatic mood in Russian)
+- "description": string (detailed scene description setting the dramatic mood in Russian, perfect for generating an 8-second video)
 - "location": string (location identifier, e.g., "БАР 'СИНИЙ ТУМАН' - ИНТЕРЬЕР - НОЧЬ")
 - "characters": string (comma-separated list of characters present in Russian)
 - "conflict": string (tension catalyst or subtext of conflict in Russian)
@@ -674,11 +773,73 @@ Example output schema to follow exactly:
     const suggestion = state.aiSuggestions.find(s => s.id === id);
     if (!suggestion) return;
     
-    // Simplistic handling of appending based on active tab/fields
+    const textToApply = suggestion.text;
+
     if (activeTab === 'draft') {
-      setState(s => ({ ...s, scriptDraft: action === 'replace' ? suggestion.text : s.scriptDraft + '\n\n' + suggestion.text }));
+      setState(s => ({ ...s, scriptDraft: action === 'replace' ? textToApply : s.scriptDraft + '\n\n' + textToApply }));
+      setLocalToast({ message: action === 'replace' ? "Черновик заменен!" : "Текст добавлен в черновик сценария!", type: "success" });
+    } else if (activeTab === 'chapters') {
+      const selectedId = state.selectedChapterId;
+      if (selectedId) {
+        setState(s => ({
+          ...s,
+          chapters: s.chapters.map(c => c.id === selectedId ? {
+            ...c,
+            summary: action === 'replace' ? textToApply : c.summary + '\n\n' + textToApply
+          } : c)
+        }));
+        setLocalToast({ message: action === 'replace' ? "Описание главы заменено!" : "Текст добавлен к описанию главы!", type: "success" });
+      } else {
+        setState(s => ({ ...s, scriptDraft: action === 'replace' ? textToApply : s.scriptDraft + '\n\n' + textToApply }));
+        setLocalToast({ message: "Глава не выбрана. Текст добавлен в общий черновик!", type: "success" });
+      }
+    } else if (activeTab === 'scenes') {
+      const selectedId = state.selectedSceneId;
+      if (selectedId) {
+        setState(s => ({
+          ...s,
+          scenes: s.scenes.map(sc => sc.id === selectedId ? {
+            ...sc,
+            action: action === 'replace' ? textToApply : (sc.action ? sc.action + '\n\n' + textToApply : textToApply),
+            description: action === 'replace' ? textToApply : (sc.description ? sc.description + '\n\n' + textToApply : textToApply)
+          } : sc)
+        }));
+        setLocalToast({ message: action === 'replace' ? "Описание сцены заменено!" : "Текст добавлен к описанию сцены!", type: "success" });
+      } else {
+        setState(s => ({ ...s, scriptDraft: action === 'replace' ? textToApply : s.scriptDraft + '\n\n' + textToApply }));
+        setLocalToast({ message: "Сцена не выбрана. Текст добавлен в общий черновик!", type: "success" });
+      }
+    } else if (activeTab === 'dialogues') {
+      const selectedId = state.selectedSceneId;
+      if (selectedId) {
+        const newLine = {
+          id: Math.random().toString(),
+          sceneId: selectedId,
+          character: "ИИ Помощник",
+          text: textToApply,
+          emotion: "Естественный тон",
+          intonation: "",
+          pauses: ""
+        };
+        setState(s => ({
+          ...s,
+          dialogueLines: [...s.dialogueLines, newLine],
+          scenes: s.scenes.map(sc => sc.id === selectedId ? {
+            ...sc,
+            dialogueNotes: action === 'replace' ? textToApply : sc.dialogueNotes + '\n\n' + textToApply
+          } : sc)
+        }));
+        setLocalToast({ message: "Реплика ИИ добавлена в блок диалогов!", type: "success" });
+      } else {
+        setState(s => ({ ...s, scriptDraft: action === 'replace' ? textToApply : s.scriptDraft + '\n\n' + textToApply }));
+        setLocalToast({ message: "Сцена не выбрана. Текст добавлен в общий черновик!", type: "success" });
+      }
     } else if (activeTab === 'final') {
-      setState(s => ({ ...s, finalScript: action === 'replace' ? suggestion.text : s.finalScript + '\n\n' + suggestion.text }));
+      setState(s => ({ ...s, finalScript: action === 'replace' ? textToApply : s.finalScript + '\n\n' + textToApply }));
+      setLocalToast({ message: action === 'replace' ? "Финальный сценарий заменен!" : "Текст добавлен в финальный сценарий!", type: "success" });
+    } else {
+      setState(s => ({ ...s, scriptDraft: action === 'replace' ? textToApply : s.scriptDraft + '\n\n' + textToApply }));
+      setLocalToast({ message: "Черновик обновлен предложениями ИИ!", type: "success" });
     }
     
     setState(s => ({ ...s, aiSuggestions: s.aiSuggestions.filter(a => a.id !== id) }));
@@ -748,11 +909,36 @@ Example output schema to follow exactly:
           </div>
 
           <div className="flex flex-wrap gap-2 p-1 bg-black/40 rounded-xl border border-slate-800 sticky top-0 z-10 backdrop-blur-md">
-            <button onClick={() => document.getElementById('section-draft')?.scrollIntoView({ behavior: 'smooth' })} className="px-4 py-2 rounded-lg text-sm transition-all text-slate-400 hover:bg-slate-800 hover:text-white">1. Источник & Черновик</button>
-            <button onClick={() => document.getElementById('section-chapters')?.scrollIntoView({ behavior: 'smooth' })} className="px-4 py-2 rounded-lg text-sm transition-all text-slate-400 hover:bg-slate-800 hover:text-white">2. Главы</button>
-            <button onClick={() => document.getElementById('section-scenes')?.scrollIntoView({ behavior: 'smooth' })} className="px-4 py-2 rounded-lg text-sm transition-all text-slate-400 hover:bg-slate-800 hover:text-white">3. Сцены</button>
-            <button onClick={() => document.getElementById('section-dialogues')?.scrollIntoView({ behavior: 'smooth' })} className="px-4 py-2 rounded-lg text-sm transition-all text-slate-400 hover:bg-slate-800 hover:text-white">4. Диалоги</button>
-            <button onClick={() => document.getElementById('section-final')?.scrollIntoView({ behavior: 'smooth' })} className="px-4 py-2 rounded-lg text-sm transition-all text-slate-400 hover:bg-slate-800 hover:text-white">5. Финальный сценарий</button>
+            <button 
+              onClick={() => { document.getElementById('section-draft')?.scrollIntoView({ behavior: 'smooth' }); setActiveTab('draft'); }} 
+              className={`px-4 py-2 rounded-lg text-sm transition-all ${activeTab === 'draft' ? 'bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            >
+              1. Источник & Черновик
+            </button>
+            <button 
+              onClick={() => { document.getElementById('section-chapters')?.scrollIntoView({ behavior: 'smooth' }); setActiveTab('chapters'); }} 
+              className={`px-4 py-2 rounded-lg text-sm transition-all ${activeTab === 'chapters' ? 'bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            >
+              2. Главы
+            </button>
+            <button 
+              onClick={() => { document.getElementById('section-scenes')?.scrollIntoView({ behavior: 'smooth' }); setActiveTab('scenes'); }} 
+              className={`px-4 py-2 rounded-lg text-sm transition-all ${activeTab === 'scenes' ? 'bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            >
+              3. Сцены
+            </button>
+            <button 
+              onClick={() => { document.getElementById('section-dialogues')?.scrollIntoView({ behavior: 'smooth' }); setActiveTab('dialogues'); }} 
+              className={`px-4 py-2 rounded-lg text-sm transition-all ${activeTab === 'dialogues' ? 'bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            >
+              4. Диалоги
+            </button>
+            <button 
+              onClick={() => { document.getElementById('section-final')?.scrollIntoView({ behavior: 'smooth' }); setActiveTab('final'); }} 
+              className={`px-4 py-2 rounded-lg text-sm transition-all ${activeTab === 'final' ? 'bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
+            >
+              5. Финальный сценарий
+            </button>
           </div>
 
           <div className="flex flex-col gap-6" id="section-draft">
@@ -928,13 +1114,13 @@ Example output schema to follow exactly:
                               placeholder="Эмоциональная цель" 
                               value={c.emotionalGoal} 
                               onChange={e => updateChapter(c.id, { emotionalGoal: e.target.value })}
-                              className="w-full h-[80px] bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00F0FF]/50 custom-scrollbar"
+                              className="w-full min-h-[100px] bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00F0FF]/50 resize-y custom-scrollbar"
                             />
                             <textarea 
                               placeholder="Функция для сюжета (Plot function)" 
                               value={c.plotFunction} 
                               onChange={e => updateChapter(c.id, { plotFunction: e.target.value })}
-                              className="w-full h-[80px] bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00F0FF]/50 custom-scrollbar"
+                              className="w-full min-h-[100px] bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-[#00F0FF]/50 resize-y custom-scrollbar"
                             />
                           </div>
                         </>
@@ -1045,10 +1231,10 @@ Example output schema to follow exactly:
                           />
                           
                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                            <textarea placeholder="Конфликт сцены" value={sc.conflict} onChange={e => updateScene(sc.id, { conflict: e.target.value })} className="w-full h-[80px] bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white placeholder-slate-500 custom-scrollbar" />
-                            <textarea placeholder="Визуальные заметки (Visual Notes)" value={sc.visualNotes} onChange={e => updateScene(sc.id, { visualNotes: e.target.value })} className="w-full h-[80px] bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white placeholder-slate-500 custom-scrollbar" />
-                            <textarea placeholder="Аудио/Звуки (Audio Notes)" value={sc.audioNotes} onChange={e => updateScene(sc.id, { audioNotes: e.target.value })} className="w-full h-[80px] bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white placeholder-slate-500 custom-scrollbar" />
-                            <textarea placeholder="Эмоциональный ритм" value={sc.emotionalBeat} onChange={e => updateScene(sc.id, { emotionalBeat: e.target.value })} className="w-full h-[80px] bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white placeholder-slate-500 custom-scrollbar" />
+                            <textarea placeholder="Конфликт сцены" value={sc.conflict} onChange={e => updateScene(sc.id, { conflict: e.target.value })} className="w-full min-h-[110px] resize-y bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white leading-relaxed placeholder-slate-500 focus:outline-none focus:border-[#00F0FF]/50 custom-scrollbar" />
+                            <textarea placeholder="Визуальные заметки (Visual Notes)" value={sc.visualNotes} onChange={e => updateScene(sc.id, { visualNotes: e.target.value })} className="w-full min-h-[110px] resize-y bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white leading-relaxed placeholder-slate-500 focus:outline-none focus:border-[#00F0FF]/50 custom-scrollbar" />
+                            <textarea placeholder="Аудио/Звуки (Audio Notes)" value={sc.audioNotes} onChange={e => updateScene(sc.id, { audioNotes: e.target.value })} className="w-full min-h-[110px] resize-y bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white leading-relaxed placeholder-slate-500 focus:outline-none focus:border-[#00F0FF]/50 custom-scrollbar" />
+                            <textarea placeholder="Эмоциональный ритм" value={sc.emotionalBeat} onChange={e => updateScene(sc.id, { emotionalBeat: e.target.value })} className="w-full min-h-[110px] resize-y bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white leading-relaxed placeholder-slate-500 focus:outline-none focus:border-[#00F0FF]/50 custom-scrollbar" />
                           </div>
                         </>
                       )
@@ -1084,7 +1270,7 @@ Example output schema to follow exactly:
                       <input type="text" placeholder="Интонация" value={dl.intonation} onChange={e => updateDialogueLine(dl.id, { intonation: e.target.value })} className="w-full bg-black/40 border border-slate-700/50 rounded-lg p-2 text-sm text-slate-400" />
                       <input type="text" placeholder="Паузы (напр. '...')" value={dl.pauses} onChange={e => updateDialogueLine(dl.id, { pauses: e.target.value })} className="w-full bg-black/40 border border-slate-700/50 rounded-lg p-2 text-sm text-slate-400" />
                     </div>
-                    <textarea placeholder="Реплика героя..." value={dl.text} onChange={e => updateDialogueLine(dl.id, { text: e.target.value })} className="w-full h-[60px] bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white resize-y custom-scrollbar focus:border-[#00F0FF]/50 outline-none" />
+                    <textarea placeholder="Реплика героя..." value={dl.text} onChange={e => updateDialogueLine(dl.id, { text: e.target.value })} className="w-full min-h-[85px] bg-black/40 border border-slate-700/50 rounded-lg p-3 text-sm text-white resize-y custom-scrollbar focus:border-[#00F0FF]/50 outline-none leading-relaxed" />
                   </div>
                 ))}
                 {state.dialogueLines.length === 0 && (
