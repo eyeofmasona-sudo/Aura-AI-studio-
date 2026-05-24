@@ -142,12 +142,6 @@ const ENERGY_CURVES = [
   { id: "drop", label: "Drop (Внезапное затишье после взрыва)" }
 ];
 
-// Rich mock audio resources for simulation
-const MOCK_BACKGROUND_LOOPS = [
-  { id: "m-1", title: "Midnight Neon Drive", genre: "synthwave", mood: "динамичное", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3", duration: "1:45", bpm: 110, createdAt: "Только что" },
-  { id: "m-2", title: "Screaming Silhouettes", genre: "cinematic", mood: "напряжённое", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3", duration: "2:30", bpm: 85, createdAt: "Минуту назад" },
-  { id: "m-3", title: "Retrofuture Nostalgia", genre: "ambient", mood: "спокойное", url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3", duration: "3:10", bpm: 72, createdAt: "5 минут назад" }
-];
 
 export function MusicModule({ onApprove }: MusicModuleProps) {
   // State initialization
@@ -169,10 +163,7 @@ export function MusicModule({ onApprove }: MusicModuleProps) {
       sfxList: [],
       generatedAudio: [],
       selectedAudioId: null,
-      aiSuggestions: [
-        { id: "as-1", title: "Формат Трейлера", text: "Добавьте медные духовые (Brass) и Climax кривую, чтобы трейлерная музыка звучала мощно и кинематографично.", type: "harmony" },
-        { id: "as-2", title: "Влияние Саундтрека", text: "Синтезаторы 80-х годов в сочетании с мистическим пианино отлично скоординируют нуар-атмосферу.", type: "history" }
-      ],
+      aiSuggestions: [],
       validationErrors: {},
       isGenerating: false
     };
@@ -185,9 +176,8 @@ export function MusicModule({ onApprove }: MusicModuleProps) {
   const dragRef = useRef<HTMLDivElement | null>(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Setup default mock states on load (so user starts with high fidelity loaded scenes)
+  // Load state from localStorage on mount
   useEffect(() => {
-    // Attempt local storage sync
     const cached = localStorage.getItem('aura_music_module_state');
     if (cached) {
       try {
@@ -196,31 +186,6 @@ export function MusicModule({ onApprove }: MusicModuleProps) {
       } catch (err) {
         console.error("Failed to parse cached Music State", err);
       }
-    } else {
-      // Bootstrap with classic initial scenes
-      const initialScenes: ImportedScene[] = [
-        { id: "sc-1", title: "Пробуждение в переулке", sceneNumber: 1, description: "Главный герой приходит в себя на влажном асфальте под неоновым дождем.", mood: "мрачное", location: "Переулок 4" },
-        { id: "sc-2", title: "Встреча в Синт-Баре", sceneNumber: 2, description: "Кей входит в бар, где за угловым столиком его ждет информатор.", mood: "напряжённое", location: "Бар Антигравити" },
-        { id: "sc-3", title: "Погоня на Флаерах", sceneNumber: 3, description: "Полицейские дроны преследуют флаер героев через облака.", mood: "эпичное", location: "Эстакада" }
-      ];
-      
-      const initialCues: SceneCue[] = initialScenes.map(sc => ({
-        sceneId: sc.id,
-        sceneTitle: sc.title,
-        sceneNumber: sc.sceneNumber,
-        startMood: sc.mood || "спокойное",
-        endMood: "напряжённое",
-        intensity: 6,
-        transition: "cross dissolve",
-        notes: "Плавное нарастание синтезатора по мере обнаружения персонажей."
-      }));
-
-      setState(prev => ({
-        ...prev,
-        importedScenes: initialScenes,
-        sceneCues: initialCues,
-        generatedAudio: MOCK_BACKGROUND_LOOPS
-      }));
     }
   }, []);
 

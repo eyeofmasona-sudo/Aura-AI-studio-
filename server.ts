@@ -19,8 +19,8 @@ async function startServer() {
     console.warn("WARNING: Neither GOOGLE_AI_API_KEY nor GEMINI_API_KEY environment variable is set. API calls will fail.");
   }
 
-  const ai = new GoogleGenAI({ 
-    apiKey: effectiveApiKey || "mock-key",
+  const ai = new GoogleGenAI({
+    apiKey: effectiveApiKey || "",
     httpOptions: {
       headers: {
         'User-Agent': 'aistudio-build',
