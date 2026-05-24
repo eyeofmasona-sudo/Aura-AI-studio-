@@ -67,6 +67,7 @@ const SPEEDS = [
 const PITCHES = ["низкая", "средняя", "высокая"];
 const EMOTIONS = ["нейтральная", "радость", "грусть", "страх", "злость", "удивление", "вдохновение", "напряжение"];
 const TTS_MODELS = [
+  { id: "gemini", label: "Gemini TTS (Современный)" },
   { id: "elevenlabs", label: "ElevenLabs (Высокий реализм)" },
   { id: "google", label: "Google Cloud TTS (Классический)" },
   { id: "openai", label: "OpenAI TTS (Выразительный)" }
@@ -327,25 +328,25 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
     }
   };
 
-  // 5. Генерация TTS через Google Cloud
+  // 5. Генерация TTS через Gemini API
   const generateTtsIfSupported = async () => {
     if (!state.voiceText && state.voiceLines.length === 0 && !state.ssmlText) {
       alert("Нет текста или SSML для генерации!");
       return;
     }
 
-    const envApiKey = import.meta.env.VITE_GOOGLE_CLOUD_TTS_API_KEY as string;
-    const savedApiKey = localStorage.getItem('google_tts_api_key');
-    const userProvidedKey = prompt('Введите Google Cloud TTS API ключ (или оставьте пусто для использования системного):');
+    const envApiKey = import.meta.env.VITE_GOOGLE_AI_API_KEY as string || import.meta.env.VITE_GEMINI_API_KEY as string;
+    const savedApiKey = localStorage.getItem('gemini_tts_api_key');
+    const userProvidedKey = prompt('Введите Gemini API ключ (или оставьте пусто для использования системного):');
 
     const apiKey = userProvidedKey?.trim() || envApiKey || savedApiKey;
     if (!apiKey) {
-      alert("API ключ не найден! Пожалуйста, установите GOOGLE_CLOUD_TTS_API_KEY или введите ключ.");
+      alert("API ключ не найден! Пожалуйста, установите VITE_GOOGLE_AI_API_KEY или введите ключ.");
       return;
     }
 
     if (userProvidedKey?.trim()) {
-      localStorage.setItem('google_tts_api_key', userProvidedKey.trim());
+      localStorage.setItem('gemini_tts_api_key', userProvidedKey.trim());
     }
 
     updateState({ isGenerating: true });
@@ -353,46 +354,45 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
     try {
       const textToSynthesize = state.ssmlText || state.voiceText || state.voiceLines.map(l => l.text).join(' ');
 
-      const voiceGenderMap: Record<string, string> = {
-        'мужской': 'MALE',
-        'женский': 'FEMALE',
-        'нейтральный': 'NEUTRAL',
-        'детский': 'MALE',
-        'пожилой': 'MALE',
-        'персонажный': 'MALE',
-        'дикторский': 'NEUTRAL'
-      };
-
-      const pitchMap: Record<string, number> = {
-        'низкая': -10,
-        'средняя': 0,
-        'высокая': 10
+      const voiceVoiceMap: Record<string, string> = {
+        'мужской': 'Chant',
+        'женский': 'Phoebe',
+        'нейтральный': 'Phoebe',
+        'детский': 'Phoebe',
+        'пожилой': 'Chant',
+        'персонажный': 'Chant',
+        'дикторский': 'Chant'
       };
 
       const speedMap: Record<string, number> = {
-        'медленно': 0.7,
+        'медленно': 0.5,
         'нормально': 1.0,
-        'быстро': 1.3,
+        'быстро': 1.5,
         'custom': parseFloat(state.customSpeed) || 1.0
       };
 
       const requestBody = {
-        input: state.ssmlText ? { ssml: textToSynthesize } : { text: textToSynthesize },
-        voice: {
-          languageCode: 'ru-RU',
-          name: 'ru-RU-Studio-A',
-          ssmlGender: voiceGenderMap[state.selectedVoiceType || 'мужской']
-        },
-        audioConfig: {
-          audioEncoding: 'MP3',
-          pitch: pitchMap[state.selectedPitch || 'средняя'],
-          speakingRate: speedMap[state.selectedSpeed || 'нормально'],
-          volumeGainDb: 0
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: textToSynthesize
+              }
+            ]
+          }
+        ],
+        system_instruction: {
+          parts: [
+            {
+              text: `You are a text-to-speech synthesizer. Generate audio that sounds natural and expressive. Voice: ${voiceVoiceMap[state.selectedVoiceType || 'мужской']}. Speaking rate: ${speedMap[state.selectedSpeed || 'нормально']}`
+            }
+          ]
         }
       };
 
       const response = await fetch(
-        `https://texttospeech.googleapis.com/v1/text:synthesize?key=${apiKey}`,
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-tts-preview:generateContent?key=${apiKey}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -401,14 +401,18 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
       );
 
       if (!response.ok) {
-        throw new Error(`Google Cloud TTS ошибка: ${response.statusText}`);
+        throw new Error(`Gemini TTS ошибка: ${response.statusText}`);
       }
 
       const data = await response.json();
-      const audioContent = data.audioContent;
+      let audioContent: string | null = null;
+
+      if (data.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data) {
+        audioContent = data.candidates[0].content.parts[0].inlineData.data;
+      }
 
       if (!audioContent) {
-        throw new Error('Нет аудиоконтента в ответе');
+        throw new Error('Нет аудиоконтента в ответе от Gemini');
       }
 
       const audioBlob = new Blob([Uint8Array.from(atob(audioContent), c => c.charCodeAt(0))], { type: 'audio/mpeg' });
@@ -417,7 +421,7 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
       const freshAudio: GeneratedVoiceAudioItem = {
         id: `tts-${Date.now()}`,
         textRef: state.voiceLines.length > 0 ? state.voiceLines[0].text.substring(0, 30) + "..." : "Полный скрипт",
-        voiceModel: 'Google Cloud TTS (Русский)',
+        voiceModel: 'Gemini TTS (Русский)',
         url: audioUrl,
         duration: "0:25",
         createdAt: new Date().toLocaleTimeString()
