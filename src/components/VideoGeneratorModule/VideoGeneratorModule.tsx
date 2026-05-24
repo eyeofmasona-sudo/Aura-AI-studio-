@@ -588,58 +588,25 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
       alert("Для качественной генерации видео рекомендуется иметь хотя бы одно якорное изображение (First или Last Frame)!");
     }
 
-    const envApiKey = import.meta.env.VITE_GOOGLE_AI_API_KEY as string;
-    const savedApiKey = localStorage.getItem('gemini_video_api_key');
-    const userProvidedKey = prompt('Введите Gemini API ключ для видеогенерации (или оставьте пусто для использования системного):');
-
-    const apiKey = userProvidedKey?.trim() || envApiKey || savedApiKey;
-    if (!apiKey) {
-      alert("API ключ не найден! Пожалуйста, установите VITE_GOOGLE_AI_API_KEY или введите ключ.");
-      return;
-    }
-
-    if (userProvidedKey?.trim()) {
-      localStorage.setItem('gemini_video_api_key', userProvidedKey.trim());
-    }
-
     updateBlock(blockId, { generationStatus: "generating" });
 
     try {
-      const prompt = block.motionPrompt || block.scenePrompt;
-      const requestBody = {
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: `Generate a cinematic video scene. ${prompt}. Duration: ${block.duration || '5 seconds'}. Camera movement: ${block.cameraMovement || 'smooth'}.`
-              }
-            ]
-          }
-        ]
-      };
+      const videoPrompt = block.motionPrompt || block.scenePrompt;
 
-      if (block.firstFrameImage) {
-        requestBody.contents[0].parts.push({
-          inline_data: {
-            mime_type: "image/jpeg",
-            data: block.firstFrameImage
-          }
-        });
-      }
-
-      const response = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-lite-generate-preview:generateContent?key=${apiKey}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(requestBody)
-        }
-      );
+      const response = await fetch('/api/gemini/video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: videoPrompt,
+          duration: block.duration || '5 seconds',
+          cameraMovement: block.cameraMovement || 'smooth',
+          firstFrameImage: block.firstFrameImage || null
+        })
+      });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(`Gemini Veo ошибка: ${response.statusText} - ${errorData.error?.message || ''}`);
+        throw new Error(`Gemini Veo ошибка: ${response.statusText} - ${errorData.error || ''}`);
       }
 
       const data = await response.json();
