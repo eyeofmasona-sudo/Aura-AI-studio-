@@ -158,31 +158,39 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
     });
   };
 
-  // 1. Источники аудио (Import / Upload)
+  // 1. Источники аудио (Import / Upload) — реальный bridge из модулей
   const importMusic = () => {
-    const mockMusic: ImportedAudioItem = {
-      id: `mus-${Date.now()}`,
-      title: "Generated Cinematic Theme",
-      source: 'music',
-      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
-      duration: "2:05",
-      createdAt: new Date().toLocaleTimeString()
-    };
-    updateState({ importedMusic: [...state.importedMusic, mockMusic] });
-    alert("Музыка импортирована из модуля «Музыка»!");
+    import("../../services/moduleBridge").then(({ getMusicAssets }) => {
+      const tracks = getMusicAssets();
+      if (!tracks.length) {
+        alert("Нет сгенерированной музыки из модуля «Музыка». Сначала создайте трек с Lyria.");
+        return;
+      }
+      const existingIds = new Set(state.importedMusic.map(m => m.id));
+      const fresh = tracks
+        .filter(t => !existingIds.has(t.id))
+        .map(t => ({ ...t, source: 'music' as const }));
+      if (!fresh.length) { alert("Все треки из модуля «Музыка» уже импортированы."); return; }
+      updateState({ importedMusic: [...state.importedMusic, ...fresh] });
+      alert(`Импортировано треков: ${fresh.length}`);
+    });
   };
 
   const importVoiceAudios = () => {
-    const mockVoice: ImportedAudioItem = {
-      id: `voi-${Date.now()}`,
-      title: "Voice Line - Scene 1",
-      source: 'voice',
-      url: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
-      duration: "0:25",
-      createdAt: new Date().toLocaleTimeString()
-    };
-    updateState({ importedVoiceAudios: [...state.importedVoiceAudios, mockVoice] });
-    alert("TTS-реплики импортированы из модуля «Голос / TTS»!");
+    import("../../services/moduleBridge").then(({ getVoiceAssets }) => {
+      const audios = getVoiceAssets();
+      if (!audios.length) {
+        alert("Нет сгенерированных голосовых дорожек из модуля «Голос / TTS».");
+        return;
+      }
+      const existingIds = new Set(state.importedVoiceAudios.map(v => v.id));
+      const fresh = audios
+        .filter(a => !existingIds.has(a.id))
+        .map(a => ({ ...a, source: 'voice' as const }));
+      if (!fresh.length) { alert("Все голосовые дорожки уже импортированы."); return; }
+      updateState({ importedVoiceAudios: [...state.importedVoiceAudios, ...fresh] });
+      alert(`Импортировано голосовых дорожек: ${fresh.length}`);
+    });
   };
 
   const openAudioUpload = () => {
@@ -299,42 +307,6 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
   // 3. Clear and Process (Controls)
   // Covered directly by input bindings to state
 
-  // 4. SFX and Ambience
-  const generateSfxList = () => {
-    const sfx: SFXItem[] = [
-      { id: 'sfx1', name: "Cyberpunk Door Heavy", sceneMapping: "Сцена 1", timing: "00:05", intensity: "80%", description: "Тяжелая металлическая дверь с гидравлическим пневмо-выдохом." },
-      { id: 'sfx2', name: "Rain Neon City", sceneMapping: "Сцена 1", timing: "Loop", intensity: "40%", description: "Мелкий дождь, ударяющийся о пластик и металл." }
-    ];
-    updateState({ sfxList: sfx });
-    alert("ИИ подобрал SFX для сцен!");
-  };
-
-  const generateAmbiencePlan = () => {
-    updateState({
-      ambiencePlan: `[Сцена 1]: Низкочастотный гул (Drone) на бэкграунде (C1), капли воды, отдаленные сирены.\n[Сцена 2]: Шум толпы в синт-баре, приглушенный бас из соседней комнаты.`
-    });
-    alert("Атмосферный план (Ambience Plan) сгенерирован!");
-  };
-
-  // 5. Audio Mix Plan
-  const generateAudioMixPlan = () => {
-    updateState({
-      audioMixPlan: "Микс должен быть плотным и агрессивным. Основной фокус на диалогах (Duck music under voice max -6dB). SFX выделены транзиентами. Лимитер настроить так, чтобы не было пиков выше -1dB True Peak."
-    });
-    alert("Микс-План успешно создан!");
-  };
-
-  const improveAudioMixPlan = () => {
-    if (!state.audioMixPlan) return alert("Сначала создайте микс-план!");
-    updateState({ isProcessing: true });
-    setTimeout(() => {
-      updateState({
-        audioMixPlan: state.audioMixPlan + "\n\n[ИИ]: Добавлены рекомендации по параллельной компрессии на Drums buss, а также mid/side эквализация на синты, чтобы дать больше места голосу в центре.",
-        isProcessing: false
-      });
-    }, 1000);
-  };
-
   // 6. Processing / Export
   const processNoiseReductionIfSupported = () => {
     updateState({ isProcessing: true });
@@ -368,14 +340,196 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
     }, 3000);
   };
 
-  // 7. ИИ-апгрейды
-  const analyzeAudioIfSupported = () => alert("Аудио проанализировано. Проблем со спектром не найдено.");
-  const proposeSoundImprovement = () => alert("ИИ предлагает добавить De-Esser на 6kHz для женского голоса.");
-  const syncAudioWithScenes = () => alert("Авто-нарезка! SFX и Cues привязаны к таймкодам сцен.");
-  const checkBalance = () => alert("Баланс: Голос звучит недостаточно ярко. Поднят ВЧ-спектр на +2dB.");
-  const prepForPlatform = () => {
-    updateState({ loudnessTarget: "-14 LUFS", selectedPlatformTarget: "youtube" });
-    alert("Аудиочастоты и лимитер адаптированы под требования алгоритма YouTube.");
+  // ── Gemini helper ────────────────────────────────────────────────────────────
+  const callGemini = async (actionName: string, inputs: string[]): Promise<string> => {
+    const res = await fetch("/api/gemini/action", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ actionName, inputs, specTitle: "Аудиоредактор" }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Gemini error");
+    return data.result ?? "";
+  };
+
+  // 7. ИИ-апгрейды — реальные Gemini вызовы
+  const analyzeAudioIfSupported = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const context = [
+        `Треки на таймлайне: ${state.audioTracks.length}`,
+        `EQ заметки: ${state.eqNotes || "нет"}`,
+        `Компрессия: ${state.compressionNotes || "нет"}`,
+        `Reverb: ${state.reverbAmount}%`,
+        `Платформа: ${state.selectedPlatformTarget}`,
+        `Целевая громкость: ${state.loudnessTarget}`,
+      ];
+      const result = await callGemini("Проанализировать аудио и дать рекомендации по сведению", context);
+      updateState({
+        isProcessing: false,
+        aiSuggestions: [{ id: `ai-${Date.now()}`, title: "Анализ аудио (Gemini)", text: result, type: "analysis" }, ...state.aiSuggestions],
+      });
+    } catch (err: any) {
+      updateState({ isProcessing: false });
+      alert(`Ошибка: ${err.message}`);
+    }
+  };
+
+  const proposeSoundImprovement = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const context = [
+        `Платформа: ${state.selectedPlatformTarget}`,
+        `EQ: ${state.eqNotes}`,
+        `Компрессия: ${state.compressionNotes}`,
+        `De-Esser: ${state.deEsserNotes}`,
+        `Reverb: ${state.reverbAmount}%, Stereo: ${state.stereoWidth}%`,
+      ];
+      const result = await callGemini("Предложить конкретные улучшения звука и DSP настройки", context);
+      updateState({
+        isProcessing: false,
+        aiSuggestions: [{ id: `ai-${Date.now()}`, title: "Улучшение звука (Gemini)", text: result, type: "improvement" }, ...state.aiSuggestions],
+      });
+    } catch (err: any) {
+      updateState({ isProcessing: false });
+      alert(`Ошибка: ${err.message}`);
+    }
+  };
+
+  const syncAudioWithScenes = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const context = [
+        `Музыкальных треков: ${state.importedMusic.length}`,
+        `Голосовых дорожек: ${state.importedVoiceAudios.length}`,
+        `SFX элементов: ${state.sfxList.length}`,
+        `Существующий SFX план: ${state.sfxList.map(s => s.name).join(", ") || "пусто"}`,
+      ];
+      const result = await callGemini("Синхронизировать звук со сценами — составить план таймингов", context);
+      updateState({
+        isProcessing: false,
+        audioMixPlan: state.audioMixPlan
+          ? `${state.audioMixPlan}\n\n[Синхронизация по сценам]:\n${result}`
+          : `[Синхронизация по сценам]:\n${result}`,
+        aiSuggestions: [{ id: `ai-${Date.now()}`, title: "Синхронизация со сценами", text: result, type: "sync" }, ...state.aiSuggestions],
+      });
+    } catch (err: any) {
+      updateState({ isProcessing: false });
+      alert(`Ошибка: ${err.message}`);
+    }
+  };
+
+  const checkBalance = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const context = [
+        `Музыкальных треков: ${state.importedMusic.length}, Голос: ${state.importedVoiceAudios.length}`,
+        `EQ: ${state.eqNotes}`,
+        `Компрессия: ${state.compressionNotes}`,
+        `Reverb: ${state.reverbAmount}%, Limiter: ${state.limiterTarget}dB`,
+        `Целевая LUFS: ${state.loudnessTarget}`,
+      ];
+      const result = await callGemini("Проверить баланс музыка/голос и дать рекомендации по ducking и уровням", context);
+      updateState({
+        isProcessing: false,
+        aiSuggestions: [{ id: `ai-${Date.now()}`, title: "Баланс музыка/голос (Gemini)", text: result, type: "balance" }, ...state.aiSuggestions],
+      });
+    } catch (err: any) {
+      updateState({ isProcessing: false });
+      alert(`Ошибка: ${err.message}`);
+    }
+  };
+
+  const prepForPlatform = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const platform = state.selectedPlatformTarget ?? "youtube";
+      const context = [`Целевая платформа: ${platform}`, `Текущая LUFS цель: ${state.loudnessTarget}`];
+      const result = await callGemini(`Подготовить аудио под платформу ${platform}: LUFS, True Peak, кодек, битрейт`, context);
+      updateState({
+        isProcessing: false,
+        aiSuggestions: [{ id: `ai-${Date.now()}`, title: `Подготовка под ${platform}`, text: result, type: "platform" }, ...state.aiSuggestions],
+      });
+    } catch (err: any) {
+      updateState({ isProcessing: false });
+      alert(`Ошибка: ${err.message}`);
+    }
+  };
+
+  const generateSfxList = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const { getVideoAssets } = await import("../../services/moduleBridge");
+      const scenes = getVideoAssets();
+      const context = scenes.length
+        ? scenes.map(s => `Сцена ${s.sceneNumber}: ${s.title} (${s.duration})`)
+        : ["Нет данных о сценах — создай общий SFX список для кинематографичного проекта"];
+      const result = await callGemini("Подобрать список SFX звуковых эффектов с таймингами для каждой сцены. Формат: Название | Сцена | Тайминг | Интенсивность | Описание", context);
+      // Parse Gemini result into SFXItem list
+      const lines = result.split("\n").filter(l => l.includes("|"));
+      const parsed = lines.map((line, i) => {
+        const parts = line.split("|").map(p => p.trim());
+        return {
+          id: `sfx-${Date.now()}-${i}`,
+          name: parts[0] ?? `SFX ${i + 1}`,
+          sceneMapping: parts[1] ?? "Сцена 1",
+          timing: parts[2] ?? "00:00",
+          intensity: parts[3] ?? "60%",
+          description: parts[4] ?? "",
+        };
+      });
+      updateState({ isProcessing: false, sfxList: parsed.length ? parsed : state.sfxList });
+      if (!parsed.length) alert(result); // fallback показываем текст
+    } catch (err: any) {
+      updateState({ isProcessing: false });
+      alert(`Ошибка: ${err.message}`);
+    }
+  };
+
+  const generateAmbiencePlan = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const { getVideoAssets } = await import("../../services/moduleBridge");
+      const scenes = getVideoAssets();
+      const context = scenes.length
+        ? scenes.map(s => `Сцена ${s.sceneNumber}: ${s.title}`)
+        : ["Кинематографичный проект, несколько сцен с разными локациями"];
+      const result = await callGemini("Создать детальный план фоновой атмосферы (Ambience Plan) для каждой сцены: шумы окружения, текстуры, дроны", context);
+      updateState({ isProcessing: false, ambiencePlan: result });
+    } catch (err: any) {
+      updateState({ isProcessing: false });
+      alert(`Ошибка: ${err.message}`);
+    }
+  };
+
+  const generateAudioMixPlan = async () => {
+    updateState({ isProcessing: true });
+    try {
+      const context = [
+        `Платформа: ${state.selectedPlatformTarget}, LUFS: ${state.loudnessTarget}`,
+        `Треков музыки: ${state.importedMusic.length}, голоса: ${state.importedVoiceAudios.length}`,
+        `EQ: ${state.eqNotes}`,
+        `SFX: ${state.sfxList.map(s => s.name).join(", ") || "нет"}`,
+        `Ambience: ${state.ambiencePlan ? "задан" : "нет"}`,
+      ];
+      const result = await callGemini("Создать профессиональный Audio Mix Plan: приоритеты треков, ducking, сайдчейн, мастеринг стратегия", context);
+      updateState({ isProcessing: false, audioMixPlan: result });
+    } catch (err: any) {
+      updateState({ isProcessing: false });
+      alert(`Ошибка: ${err.message}`);
+    }
+  };
+
+  const improveAudioMixPlan = async () => {
+    if (!state.audioMixPlan) return alert("Сначала создайте микс-план!");
+    updateState({ isProcessing: true });
+    try {
+      const result = await callGemini("Улучшить и расширить Audio Mix Plan — добавить детали по каждому треку", [state.audioMixPlan]);
+      updateState({ isProcessing: false, audioMixPlan: result });
+    } catch (err: any) {
+      updateState({ isProcessing: false });
+      alert(`Ошибка: ${err.message}`);
+    }
   };
 
   // 8. Передача дальше
