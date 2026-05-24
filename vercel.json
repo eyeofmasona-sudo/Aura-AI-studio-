@@ -3,17 +3,14 @@
   "buildCommand": "vite build",
   "outputDirectory": "dist",
   "installCommand": "npm install",
-  "framework": null,
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/$1" },
+    { "source": "/api/gemini/status", "destination": "/api/gemini/status" },
+    { "source": "/api/gemini/action", "destination": "/api/gemini/action" },
+    { "source": "/api/capabilities", "destination": "/api/capabilities" },
+    { "source": "/api/generate/image", "destination": "/api/generate/image" },
+    { "source": "/api/generate/tts", "destination": "/api/generate/tts" },
+    { "source": "/api/generate/music", "destination": "/api/generate/music" },
+    { "source": "/api/generate/video", "destination": "/api/generate/video" },
     { "source": "/(.*)", "destination": "/index.html" }
-  ],
-  "functions": {
-    "api/**/*.ts": {
-      "runtime": "@vercel/node"
-    }
-  },
-  "env": {
-    "NODE_ENV": "production"
-  }
+  ]
 }
