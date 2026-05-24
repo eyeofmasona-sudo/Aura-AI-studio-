@@ -574,27 +574,97 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
     updateBlock(blockId, { motionPrompt: value });
   };
 
-  // Handler: generateSceneVideo
-  const generateSceneVideo = (blockId: string) => {
+  // Handler: generateSceneVideo using Gemini Veo
+  const generateSceneVideo = async (blockId: string) => {
     const block = state.sceneVideoBlocks.find(b => b.id === blockId);
     if (!block) return;
+
+    if (!block.scenePrompt) {
+      alert("Сначала заполните или соберите prompt для сцены!");
+      return;
+    }
 
     if (!block.firstFrameImage && !block.lastFrameImage) {
       alert("Для качественной генерации видео рекомендуется иметь хотя бы одно якорное изображение (First или Last Frame)!");
     }
 
+    const envApiKey = import.meta.env.VITE_GOOGLE_AI_API_KEY as string;
+    const savedApiKey = localStorage.getItem('gemini_video_api_key');
+    const userProvidedKey = prompt('Введите Gemini API ключ для видеогенерации (или оставьте пусто для использования системного):');
+
+    const apiKey = userProvidedKey?.trim() || envApiKey || savedApiKey;
+    if (!apiKey) {
+      alert("API ключ не найден! Пожалуйста, установите VITE_GOOGLE_AI_API_KEY или введите ключ.");
+      return;
+    }
+
+    if (userProvidedKey?.trim()) {
+      localStorage.setItem('gemini_video_api_key', userProvidedKey.trim());
+    }
+
     updateBlock(blockId, { generationStatus: "generating" });
-    
-    setTimeout(() => {
-      const vidId = `vid-${Math.random().toString(36).substr(2, 9)}`;
-      const randomGif = MOCK_VIDEOS[Math.floor(Math.random() * MOCK_VIDEOS.length)];
-      
+
+    try {
+      const prompt = block.motionPrompt || block.scenePrompt;
+      const requestBody = {
+        contents: [
+          {
+            role: "user",
+            parts: [
+              {
+                text: `Generate a cinematic video scene. ${prompt}. Duration: ${block.duration || '5 seconds'}. Camera movement: ${block.cameraMovement || 'smooth'}.`
+              }
+            ]
+          }
+        ]
+      };
+
+      if (block.firstFrameImage) {
+        requestBody.contents[0].parts.push({
+          inline_data: {
+            mime_type: "image/jpeg",
+            data: block.firstFrameImage
+          }
+        });
+      }
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-lite-generate-preview:generateContent?key=${apiKey}`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(requestBody)
+        }
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(`Gemini Veo ошибка: ${response.statusText} - ${errorData.error?.message || ''}`);
+      }
+
+      const data = await response.json();
+      let videoUrl: string | null = null;
+
+      // Handle different response formats from Gemini Veo
+      if (data.candidates?.[0]?.content?.parts?.[0]?.file_data?.file_uri) {
+        videoUrl = data.candidates[0].content.parts[0].file_data.file_uri;
+      } else if (data.candidates?.[0]?.content?.parts?.[0]?.inline_data?.data) {
+        const videoData = data.candidates[0].content.parts[0].inline_data.data;
+        const videoBlob = new Blob([Uint8Array.from(atob(videoData), c => c.charCodeAt(0))], { type: 'video/mp4' });
+        videoUrl = URL.createObjectURL(videoBlob);
+      }
+
+      if (!videoUrl) {
+        throw new Error('Нет видеоконтента в ответе от Gemini');
+      }
+
+      const vidId = `vid-${Date.now()}`;
       const newVideo = {
         id: vidId,
-        url: randomGif,
-        previewUrl: randomGif,
+        url: videoUrl,
+        previewUrl: block.firstFrameImage || videoUrl,
         timestamp: new Date().toLocaleTimeString(),
-        motionType: block.cameraMovement || "slow push-in"
+        motionType: block.cameraMovement || "smooth"
       };
 
       const updatedVideos = [...block.generatedVideos, newVideo];
@@ -604,7 +674,13 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
         generatedVideos: updatedVideos,
         selectedVideoId: vidId
       });
-    }, 2500);
+
+      alert("Видео успешно сгенерировано!");
+    } catch (error) {
+      console.error("Veo видеогенерация ошибка:", error);
+      alert(`Ошибка при генерации видео: ${error instanceof Error ? error.message : 'Неизвестная ошибка'}`);
+      updateBlock(blockId, { generationStatus: "error" });
+    }
   };
 
   // Handler: selectSceneVideo
