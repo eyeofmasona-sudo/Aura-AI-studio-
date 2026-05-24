@@ -845,13 +845,32 @@ Example output schema to follow exactly:
     setState(s => ({ ...s, aiSuggestions: s.aiSuggestions.filter(a => a.id !== id) }));
   };
 
-  const copyFinalScript = () => {
-    navigator.clipboard.writeText(state.finalScript);
+  const copyFinalScript = () => { navigator.clipboard.writeText(state.finalScript); };
+
+  const saveScenarioModule = () => {
+    const saveData = { chapters: state.chapters, scenes: state.scenes, finalScript: state.finalScript, scriptDraft: state.scriptDraft, savedAt: new Date().toISOString() };
+    localStorage.setItem("aura_scenario_state", JSON.stringify(saveData));
+    setLocalToast({ message: `Сценарий сохранён: ${state.chapters.length} глав, ${state.scenes.length} сцен.`, type: "success" });
+    onApprove();
   };
-  const saveScenarioModule = () => alert("Сценарий сохранён");
-  const sendToFrameGeneratorModule = () => alert("Передано в Генератор Кадров");
-  const sendToVideoGeneratorModule = () => alert("Передано в Генератор Видео");
-  const sendToTTSModule = () => alert("Передано в Голос (TTS)");
+
+  const sendToFrameGeneratorModule = () => {
+    const saveData = { chapters: state.chapters, scenes: state.scenes, finalScript: state.finalScript, scriptDraft: state.scriptDraft };
+    localStorage.setItem("aura_scenario_state", JSON.stringify(saveData));
+    setLocalToast({ message: "Сценарий сохранён. Откройте «Генератор Кадров» → «Импорт из Сценария».", type: "success" });
+  };
+
+  const sendToVideoGeneratorModule = () => {
+    const saveData = { chapters: state.chapters, scenes: state.scenes, finalScript: state.finalScript, scriptDraft: state.scriptDraft };
+    localStorage.setItem("aura_scenario_state", JSON.stringify(saveData));
+    setLocalToast({ message: "Сценарий сохранён. Откройте «Генератор Видео» → «Импорт из Сценария».", type: "success" });
+  };
+
+  const sendToTTSModule = () => {
+    const text = state.scenes.map(sc => sc.action || sc.title).filter(Boolean).join("\n\n");
+    localStorage.setItem("aura_scenario_tts_text", text);
+    setLocalToast({ message: "Текст сцен сохранён для модуля «Голос / TTS».", type: "success" });
+  };
 
   return (
     <div className="w-full flex flex-col lg:flex-row gap-6 h-full relative">

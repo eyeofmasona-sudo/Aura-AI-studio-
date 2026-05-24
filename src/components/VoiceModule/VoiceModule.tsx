@@ -127,25 +127,35 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
     });
   };
 
-  // 1. Источники текста
+  // 1. Источники текста — реальный импорт
   const importScript = () => {
-    const scriptMock = {
-      title: "Сцена 1. Пробуждение в переулке",
-      rawText: "Кей: Где я? Что произошло?\nЛира (по рации): Кей, ты меня слышишь? Уходи из этого сектора, они уже выслали патруль!\nКей: Я ничего не помню... Моя голова раскалывается.\nЛира: Нет времени объяснять. Беги к старому терминалу, я скину координаты."
-    };
-    updateState({
-      importedScript: scriptMock,
-      voiceText: state.voiceText ? `${state.voiceText}\n\n${scriptMock.rawText}` : scriptMock.rawText
-    });
-    alert("Реплики импортированы из модуля «Сценарий и Главы»!");
+    const saved = localStorage.getItem("aura_scenario_state");
+    const ttsSaved = localStorage.getItem("aura_scenario_tts_text");
+    if (ttsSaved) {
+      updateState({ voiceText: state.voiceText ? `${state.voiceText}\n\n${ttsSaved}` : ttsSaved });
+      alert("Текст сцен импортирован из Сценария!");
+      return;
+    }
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const text = (parsed.scenes ?? []).map((sc: any) => sc.action || sc.title).filter(Boolean).join("\n\n");
+        if (text) { updateState({ voiceText: state.voiceText ? `${state.voiceText}\n\n${text}` : text }); alert("Реплики сцен импортированы из Сценария!"); return; }
+      } catch {}
+    }
+    alert("Сначала сохраните сценарий в модуле «Сценарий» → «Передать в Голос».");
   };
 
   const importCharacters = () => {
-    const charMock = ["Кей (Протагонист)", "Лира", "Диктор", "Патрульный Дрон"];
-    updateState({
-      importedCharacters: charMock
-    });
-    alert("Персонажи импортированы! (" + charMock.join(", ") + ")");
+    const saved = localStorage.getItem("aura_character_state");
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        const chars = (parsed.characters ?? parsed ?? []).map((c: any) => c.fullName ?? c.name ?? "Персонаж").filter(Boolean);
+        if (chars.length) { updateState({ importedCharacters: chars }); alert(`Импортировано персонажей: ${chars.length}`); return; }
+      } catch {}
+    }
+    alert("Нет персонажей. Создайте их в модуле «Персонажи».");
   };
 
   const updateVoiceText = (value: string) => {
@@ -183,18 +193,17 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
     setActiveTab('lines');
   };
 
-  const improveVoiceText = () => {
-    if (!state.voiceText) {
-      alert("Нечего улучшать. Пожалуйста, добавьте текст.");
-      return;
-    }
+  const improveVoiceText = async () => {
+    if (!state.voiceText) { alert("Нечего улучшать. Пожалуйста, добавьте текст."); return; }
     updateState({ isGenerating: true });
-    setTimeout(() => {
-      const improved = state.voiceText
-        .replace(/Что произошло\?/g, "Что... произошло?")
-        .replace(/Я ничего не помню/g, "Чёрт, я ничего не помню");
-      updateState({ voiceText: improved, isGenerating: false });
-    }, 1000);
+    try {
+      const res = await fetch("/api/gemini/action", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actionName: "Улучшить текст для озвучки (TTS): сделать речь естественной, добавить паузы, интонацию", inputs: [state.voiceText], specTitle: "Голос / TTS" }),
+      });
+      const data = await res.json();
+      updateState({ voiceText: data.result ?? state.voiceText, isGenerating: false });
+    } catch (err: any) { updateState({ isGenerating: false }); alert(`Ошибка: ${err.message}`); }
   };
 
   // 2. Voice script editor
@@ -378,16 +387,21 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
 
   // 7. Передача дальше
   const saveTtsModule = () => {
-    alert("Направления голоса и сгенерированные TTS аудиофайлы сохранены в проекте!");
+    const saveData = { generatedVoiceAudios: state.generatedVoiceAudios, voiceLines: state.voiceLines, ssmlText: state.ssmlText, savedAt: new Date().toISOString() };
+    localStorage.setItem("aura_voice_module_state", JSON.stringify(saveData));
+    alert(`Голос сохранён: ${state.generatedVoiceAudios.length} аудиофайлов.`);
     onApprove();
   };
-  
+
   const sendToAudioEditor = () => {
-    alert("Голос передан в Аудиоредактор (в виде выделенных дорожек диалогов).");
+    const saveData = { generatedVoiceAudios: state.generatedVoiceAudios, voiceLines: state.voiceLines, ssmlText: state.ssmlText };
+    localStorage.setItem("aura_voice_module_state", JSON.stringify(saveData));
+    alert(`${state.generatedVoiceAudios.length} TTS-дорожек сохранено. Откройте «Аудиоредактор» → «Импорт TTS».`);
   };
 
   const sendToVideoEditor = () => {
-    alert("Реплики и субтитры переданы в Видеоредактор для синхронизации.");
+    localStorage.setItem("aura_voice_module_state", JSON.stringify({ generatedVoiceAudios: state.generatedVoiceAudios, voiceLines: state.voiceLines }));
+    alert("Голосовые дорожки сохранены для Видеоредактора.");
   };
 
   return (

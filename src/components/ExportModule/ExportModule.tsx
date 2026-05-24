@@ -85,7 +85,29 @@ export function ExportModule({ onApprove }: ExportModuleProps) {
   const updateState = (patch: Partial<ExportModuleState>) => setState(s => ({ ...s, ...patch }));
 
   const importFinalEdit = () => {
-    updateState({ importedFinalEdit: { url: 'https://images.unsplash.com/photo-1485846234645-a62644f84728?w=800&q=80', status: 'ready' } });
+    // Try video editor export first
+    const videoExport = localStorage.getItem('aura_export_video');
+    if (videoExport) {
+      try {
+        const parsed = JSON.parse(videoExport);
+        updateState({ importedFinalEdit: { url: parsed.clips?.[0]?.url ?? '', status: 'ready', clips: parsed.clips, colorGrade: parsed.colorGrade } });
+        alert(`Видеоряд импортирован: ${parsed.clips?.length ?? 0} клипов.`);
+        return;
+      } catch {}
+    }
+    // Fallback to video generator blocks
+    const blocks = localStorage.getItem('video_generator_blocks');
+    if (blocks) {
+      try {
+        const parsed = JSON.parse(blocks);
+        const first = parsed.find((b: any) => b.selectedVideoId);
+        const vid = first?.generatedVideos?.find((v: any) => v.id === first.selectedVideoId);
+        updateState({ importedFinalEdit: { url: vid?.url ?? '', status: 'ready' } });
+        alert('Видео из Генератора импортировано.');
+        return;
+      } catch {}
+    }
+    alert('Нет готового видео. Завершите этапы Видеоредактора или Генератора Видео.');
   };
   
   const importFinalAudio = () => {
@@ -168,13 +190,24 @@ export function ExportModule({ onApprove }: ExportModuleProps) {
 
   const exportVideoIfSupported = () => {
     updateState({ isExporting: true });
+    // Check if we have real video URL to export
+    const finalUrl = state.importedFinalEdit?.url;
     setTimeout(() => {
-      updateState({ 
-        isExporting: false, 
-        exportResult: { status: 'success', url: 'https://example.com/download' } 
-      });
-      alert('Экспорт завершен успешно!');
-    }, 2000);
+      if (finalUrl && (finalUrl.startsWith('blob:') || finalUrl.startsWith('data:'))) {
+        // Create real download link
+        const a = document.createElement('a');
+        a.href = finalUrl;
+        a.download = `${state.title || 'aura-export'}.mp4`;
+        a.click();
+        updateState({ isExporting: false, exportResult: { status: 'success', url: finalUrl } });
+      } else {
+        // No real video yet — save metadata package
+        const pkg = { title: state.title, description: state.description, tags: state.tags, hashtags: state.hashtags, cta: state.cta, platforms: state.selectedPlatforms, format: state.selectedFileFormat, quality: state.selectedQualityPreset, exportedAt: new Date().toISOString() };
+        localStorage.setItem('aura_export_package', JSON.stringify(pkg));
+        updateState({ isExporting: false, exportResult: { status: 'success', url: '' } });
+        alert('Метаданные пакета экспорта сохранены. Видеофайл будет доступен после генерации в модуле «Генератор Видео».');
+      }
+    }, 800);
   };
 
   return (
@@ -431,10 +464,10 @@ export function ExportModule({ onApprove }: ExportModuleProps) {
               <button onClick={buildExportPackage} className="py-3 px-4 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-slate-300 transition-colors">
                  <Box className="w-4 h-4" /> Собрать Export Package
               </button>
-              <button onClick={() => alert("Metadata скопирована в буфер обмена")} className="py-3 px-4 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-slate-300 transition-colors">
+              <button onClick={() => { const pkg = { title: state.title, description: state.description, tags: state.tags, hashtags: state.hashtags, cta: state.cta }; navigator.clipboard.writeText(JSON.stringify(pkg, null, 2)); }} className="py-3 px-4 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-slate-300 transition-colors">
                  <Copy className="w-4 h-4" /> Скопировать Metadata
               </button>
-              <button onClick={() => alert("Настройки экспорта скачаны")} className="py-3 px-4 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-slate-300 transition-colors">
+              <button onClick={() => { const pkg = { format: state.selectedFileFormat, quality: state.selectedQualityPreset, platforms: state.selectedPlatforms }; const blob = new Blob([JSON.stringify(pkg, null, 2)], { type: 'application/json' }); const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'export-settings.json'; a.click(); }} className="py-3 px-4 bg-slate-900 border border-slate-700 hover:border-slate-500 rounded-xl flex items-center justify-center gap-2 text-xs font-bold text-slate-300 transition-colors">
                  <Settings2 className="w-4 h-4" /> Скачать настройки 
               </button>
               <div className="lg:col-span-2 flex min-w-0">
@@ -483,10 +516,10 @@ export function ExportModule({ onApprove }: ExportModuleProps) {
             <button onClick={prepareYouTubeExport} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">
               <Youtube className="w-3.5 h-3.5 text-red-500" /> Подготовить экспорт под YouTube
             </button>
-            <button onClick={() => alert("TikTok настройки применены")} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">
+            <button onClick={() => updateState({ selectedPlatform: 'tiktok', selectedFileFormat: 'MP4', selectedQualityPreset: 'high' })} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">
               <MonitorSmartphone className="w-3.5 h-3.5 text-[#00F0FF]" /> Подготовить экспорт под TikTok
             </button>
-            <button onClick={() => alert("Reels настройки применены")} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">
+            <button onClick={() => updateState({ selectedPlatform: 'reels', selectedFileFormat: 'MP4', selectedQualityPreset: 'high' })} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">
               <Instagram className="w-3.5 h-3.5 text-pink-500" /> Подготовить экспорт под Reels
             </button>
             <button onClick={createPlatformVersions} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">

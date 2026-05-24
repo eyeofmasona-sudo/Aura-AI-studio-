@@ -532,22 +532,32 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
     updateBlock(blockId, { scenePrompt: `Кинематографичный кадр. ${elements}. Драматичное движение между кадрами.` });
   };
 
-  // Handler: improveScenePrompt
-  const improveScenePrompt = (blockId: string) => {
+  // Handler: improveScenePrompt — real Gemini
+  const improveScenePrompt = async (blockId: string) => {
     const block = state.sceneVideoBlocks.find(b => b.id === blockId);
-    if (!block || !block.scenePrompt) {
-      alert("Сначала заполните или соберите базовый промпт!");
-      return;
-    }
-    
+    if (!block || !block.scenePrompt) { alert("Сначала заполните или соберите базовый промпт!"); return; }
     updateBlock(blockId, { generationStatus: "generating" });
-    setTimeout(() => {
-      const improved = `${block.scenePrompt} Captured on ARRI Alexa, 35mm lens, volumetric godrays, raytraced reflection on rain puddles, micro-expressions of shock, high fidelity cinematography workflow, extremely detailed.`;
-      updateBlock(blockId, { 
-        scenePrompt: improved,
-        generationStatus: "idle"
+    try {
+      const res = await fetch("/api/gemini/action", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actionName: "Улучшить Veo промпт для генерации видео",
+          inputs: [
+            `Текущий промпт: ${block.scenePrompt}`,
+            block.location ? `Локация: ${block.location}` : "",
+            block.mood ? `Настроение: ${block.mood}` : "",
+            block.cameraMovement ? `Камера: ${block.cameraMovement}` : "",
+            "Верни только улучшенный промпт на английском. Добавь кинематографические детали: камерный язык, свет, движение. Без пояснений.",
+          ].filter(Boolean),
+          specTitle: "Генератор Видео",
+        }),
       });
-    }, 1200);
+      const data = await res.json();
+      updateBlock(blockId, { scenePrompt: data.result ?? block.scenePrompt, generationStatus: "idle" });
+    } catch (err: any) {
+      updateBlock(blockId, { generationStatus: "idle" });
+      alert(`Ошибка: ${err.message}`);
+    }
   };
 
   // Handler: copyScenePrompt
@@ -629,7 +639,7 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
         timelineClips: updatedClips
       };
     });
-    alert("Клип добавлен / обновлен в Timeline!");
+    // clip added
   };
 
   // Handler: buildTimelineFromSceneVideos
@@ -663,32 +673,31 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
     alert(`Таймлайн успешно собран! Объединено видео-клипов: ${newClips.length}.`);
   };
 
-  // Handler: sendTimelineToVideoEditor
+  // Handler: sendTimelineToVideoEditor — writes to localStorage for VideoEditor bridge
   const sendTimelineToVideoEditor = () => {
-    if (state.timelineClips.length === 0) {
-      alert("Сначала соберите таймлайн из сгенерированных сцен!");
-      return;
-    }
-    alert(`Все видео и метаданные (${state.timelineClips.length} клипов) успешно переданы в модуль 6. Видеоредактор!`);
+    if (state.timelineClips.length === 0) { alert("Сначала соберите таймлайн из сгенерированных сцен!"); return; }
+    localStorage.setItem("video_generator_clips", JSON.stringify(state.timelineClips));
+    localStorage.setItem("video_generator_blocks", JSON.stringify(state.sceneVideoBlocks));
+    alert(`${state.timelineClips.length} клипов передано в Видеоредактор. Нажмите «Импорт из Видео» там.`);
   };
 
-  // Miscellaneous functions
-  const runAiSuggestionAction = (title: string, promptText: string, blockId: string) => {
+  // Miscellaneous functions — real Gemini
+  const runAiSuggestionAction = async (title: string, promptText: string, blockId: string) => {
     setState(s => ({ ...s, isGenerating: true }));
-    setTimeout(() => {
-      const sugId = `sug-${Math.random().toString(36).substr(2, 9)}`;
-      const newSug = {
-        id: sugId,
-        title: title,
-        text: `ИИ предлагает добавить динамику: ${promptText} для лучшего удержания внимания зрителя. Сцена станет глубже.`,
-        type: "expert"
-      };
-      setState(s => ({
-        ...s,
-        aiSuggestions: [newSug, ...s.aiSuggestions],
-        isGenerating: false
-      }));
-    }, 1200);
+    try {
+      const block = state.sceneVideoBlocks.find(b => b.id === blockId);
+      const res = await fetch("/api/gemini/action", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          actionName: title,
+          inputs: [promptText, block ? `Сцена: ${block.sceneTitle}, ${block.sceneDescription}` : ""].filter(Boolean),
+          specTitle: "Генератор Видео",
+        }),
+      });
+      const data = await res.json();
+      const newSug = { id: `sug-${Math.random().toString(36).substr(2, 9)}`, title, text: data.result ?? promptText, type: "expert" };
+      setState(s => ({ ...s, aiSuggestions: [newSug, ...s.aiSuggestions], isGenerating: false }));
+    } catch { setState(s => ({ ...s, isGenerating: false })); }
   };
 
   const handleApplySuggestion = (id: string) => {
@@ -1369,14 +1378,14 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
           </button>
 
           <button 
-            onClick={() => alert("Звукотехнику высланы сценарии озвучания и шумов.")} 
+            onClick={() => { localStorage.setItem('aura_music_task', JSON.stringify({ scenes: state.sceneVideoBlocks.map(b => ({ title: b.sceneTitle, description: b.sceneDescription, mood: b.mood })) })); alert('Сцены сохранены для модуля Музыка.'); }} 
             className="px-5 py-3 rounded-xl bg-black/50 border border-slate-700 text-slate-300 font-bold uppercase text-xs tracking-widest hover:bg-slate-800 transition-colors flex items-center gap-2"
           >
             <Music className="w-4 h-4 text-[#00F0FF]" /> Задачи в Музыку
           </button>
 
           <button 
-            onClick={() => alert("Текст реплик по персонажам успешно передан в модуль TTS.")} 
+            onClick={() => { const text = state.sceneVideoBlocks.map(b => b.sceneDescription || b.sceneTitle).filter(Boolean).join("\n\n"); localStorage.setItem('aura_scenario_tts_text', text); alert('Тексты сцен сохранены для модуля Голос / TTS.'); }} 
             className="px-5 py-3 rounded-xl bg-black/50 border border-slate-700 text-slate-300 font-bold uppercase text-xs tracking-widest hover:bg-slate-800 transition-colors flex items-center gap-2"
           >
             <Mic className="w-4 h-4 text-[#00F0FF]" /> Реплики в Голос
