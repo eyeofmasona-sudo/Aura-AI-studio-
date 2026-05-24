@@ -342,7 +342,7 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
         // If first or last frames are empty, we inject beautiful anchor presets matching their atmosphere
         let fimg = b.firstFrameImage;
         let limg = b.lastFrameImage;
-        
+
         if (!fimg) {
           if (b.location.toLowerCase().includes("бар")) {
             fimg = MOCK_THEMED_IMAGES.bar[0];
@@ -375,6 +375,27 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
       };
     });
     alert("Импортированы якорные кадры из «Генератора Кадров»! Стыковочные слоты Первого и Последнего кадра заполнены.");
+  };
+
+  // Handler: importVoiceDataFromVoiceModule
+  const importVoiceDataFromVoiceModule = () => {
+    try {
+      const voiceStateJson = localStorage.getItem("aura_voice_module_state");
+      if (!voiceStateJson) {
+        alert("Нет данных голоса. Сначала сгенерируйте голос в модуле «Голос / TTS».");
+        return;
+      }
+      const voiceData = JSON.parse(voiceStateJson);
+      if (!voiceData.generatedVoiceAudios || voiceData.generatedVoiceAudios.length === 0) {
+        alert("Нет сгенерированных аудиодорожек. Сначала запустите генерацию голоса в модуле «Голос».");
+        return;
+      }
+      // Store voice data for use in scenes
+      localStorage.setItem("video_generator_imported_voice", JSON.stringify(voiceData));
+      alert(`Успешно импортировано ${voiceData.generatedVoiceAudios.length} голосовых дорожек из модуля «Голос»!\n\nТеперь вы можете использовать эти аудиодорожки в редактор видео.`);
+    } catch (err) {
+      alert("Ошибка при импорте голоса: " + (err instanceof Error ? err.message : "Неизвестная ошибка"));
+    }
   };
 
   // Handler: createSceneVideoBlocksFromScenes
@@ -871,17 +892,23 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
         {/* ИСТОЧНИКИ / ИМПОРТ */}
         <div className="flex flex-col sm:flex-row gap-4 bg-black/40 border border-slate-800 rounded-xl p-4 shrink-0">
           <span className="text-[10px] hidden sm:flex font-bold text-slate-500 uppercase tracking-widest items-center pb-0.5">Импорт данных:</span>
-          <button 
-            onClick={importScenesFromScenario} 
+          <button
+            onClick={importScenesFromScenario}
             className="flex-1 py-2.5 min-h-[44px] bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-slate-300 transition-colors flex items-center justify-center gap-2"
           >
             <RefreshCcw className="w-4 h-4 text-[#00F0FF]" /> Из Сценария
           </button>
-          <button 
-            onClick={importScenesFromFrameGenerator} 
+          <button
+            onClick={importScenesFromFrameGenerator}
             className="flex-1 py-2.5 min-h-[44px] bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-slate-300 transition-colors flex items-center justify-center gap-2"
           >
             <ImageIcon className="w-4 h-4 text-[#b026ff]" /> Из Кадрогенератора
+          </button>
+          <button
+            onClick={importVoiceDataFromVoiceModule}
+            className="flex-1 py-2.5 min-h-[44px] bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-slate-300 transition-colors flex items-center justify-center gap-2"
+          >
+            <Mic className="w-4 h-4 text-rose-400" /> Из Голоса
           </button>
         </div>
 

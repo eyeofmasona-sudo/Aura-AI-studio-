@@ -468,19 +468,25 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <button 
+            <button
               onClick={importScript}
               className="px-3 py-1.5 bg-black/40 border border-slate-700 hover:border-red-400/40 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5"
             >
               <FileText className="w-3.5 h-3.5 text-red-400" /> Из Сценария
             </button>
-            <button 
+            <button
               onClick={importCharacters}
               className="px-3 py-1.5 bg-black/40 border border-slate-700 hover:border-red-400/40 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5"
             >
               <CheckSquare className="w-3.5 h-3.5 text-red-400" /> Персонажи
             </button>
-            <button 
+            <button
+              onClick={sendToVideoEditor}
+              className="px-3 py-1.5 bg-black/40 border border-slate-700 hover:border-purple-400/40 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5"
+            >
+              <ArrowRight className="w-3.5 h-3.5 text-purple-400" /> В Видеогенерацию
+            </button>
+            <button
               onClick={saveTtsModule}
               className="px-4 py-1.5 bg-gradient-to-r from-red-600 to-rose-500 hover:opacity-90 text-white font-extrabold text-xs uppercase tracking-wider rounded-lg transition-all flex items-center gap-1.5"
             >
