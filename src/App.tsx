@@ -24,8 +24,18 @@ import { AiStore } from './services/aiStore';
 
 export default function App() {
   const [activeStepId, setActiveStepId] = useState('vision');
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
-  const [isAssistantOpen, setIsAssistantOpen] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1280;
+    }
+    return false;
+  });
+  const [isAssistantOpen, setIsAssistantOpen] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return window.innerWidth >= 1536;
+    }
+    return false;
+  });
   const [isFocusMode, setIsFocusMode] = useState(false);
   const [lastTapTime, setLastTapTime] = useState(0);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' | 'info' } | null>(null);
@@ -118,8 +128,8 @@ export default function App() {
       )}
 
       <div className={`fixed inset-y-0 left-0 z-50 transition-transform duration-300 ease-in-out ${
-        isFocusMode ? 'hidden' : 'xl:static xl:block'
-      } ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full xl:translate-x-0'}`}>
+        isFocusMode ? 'hidden' : (isSidebarOpen ? 'xl:static xl:block' : 'xl:hidden')
+      } ${isSidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <Sidebar 
           steps={specData} 
           activeStepId={activeStepId} 
@@ -143,8 +153,8 @@ export default function App() {
           activeStepIndex={getActiveIndex() !== -1 ? getActiveIndex() : 0} 
           unlockedSteps={unlockedSteps} 
           onUnlockAll={unlockedSteps.length < specData.length ? handleUnlockAll : undefined}
-          onToggleSidebar={() => setIsSidebarOpen(true)}
-          onToggleAssistant={() => setIsAssistantOpen(true)}
+          onToggleSidebar={() => setIsSidebarOpen(prev => !prev)}
+          onToggleAssistant={() => setIsAssistantOpen(prev => !prev)}
         />
         
         <div className="flex-1 overflow-y-auto px-4 md:px-6 lg:px-8 xl:px-10 pt-6 sm:pt-8 pb-20 relative custom-scrollbar bg-[var(--color-space-900)]">
@@ -248,8 +258,8 @@ export default function App() {
       )}
 
       <div className={`fixed inset-y-0 right-0 z-50 transition-transform duration-300 ease-in-out ${
-        isFocusMode ? 'hidden' : '2xl:static 2xl:block'
-      } ${isAssistantOpen ? 'translate-x-0' : 'translate-x-full 2xl:translate-x-0'}`}>
+        isFocusMode ? 'hidden' : (isAssistantOpen ? '2xl:static 2xl:block' : '2xl:hidden')
+      } ${isAssistantOpen ? 'translate-x-0' : 'translate-x-full'}`}>
         <AIAssistant 
           activeStepId={activeStepId} 
           unlockedSteps={unlockedSteps} 

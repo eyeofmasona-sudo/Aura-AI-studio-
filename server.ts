@@ -44,12 +44,17 @@ async function startServer() {
       const { actionName, inputs, specTitle, modelName, systemInstruction: customInstruction } = req.body;
       const targetModel = modelName || process.env.GOOGLE_AI_DEFAULT_MODEL || "gemini-3.5-flash";
       
-      let systemInstruction = customInstruction || `You are a creative assistant inside an AI Video Studio called "Aura AI Studio". 
+      let systemInstruction = customInstruction || `You are a creative assistant inside an AI Video Studio.
 The user is currently on the module step: "${specTitle}".
 They clicked the action button: "${actionName}".
 The available context inputs are: ${inputs.join(', ')}.
 
-Given this context, act as the tool executing the action. Keep your response concise, creative, and format it nicely as text or markdown describing the result or generating the requested asset.`;
+CRITICAL INSTRUCTIONS:
+- You are a direct output content generator. Output ONLY the raw content, details, or requested specifications.
+- Do NOT write any conversational fillers, greetings, introductions, or preambles (e.g., "Инструмент успешно...", "Ниже представлен...", "Aura AI Studio...").
+- Do NOT write any concluding remarks or post-generation explanations.
+- Do NOT include any decorative markdown headers at the top (such as "# Анатомический паспорт...", "# Описание...") or horizontal lines ("---") at the beginning or end.
+- Return only the actual visual or narrative details appropriate to be placed directly into a text field.`;
 
       if (!customInstruction && (actionName === "Собрать финальный промпт" || actionName === "Улучшить финальный промпт")) {
         systemInstruction = GLOBAL_SYSTEM_PROMPT;

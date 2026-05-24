@@ -1,10 +1,13 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { 
   Lightbulb, Users, BookOpen, Image as ImageIcon, 
   Video, Music, Mic, Sliders, Film, Download,
-  Lock, CheckCircle2, LayoutTemplate, X
+  Lock, CheckCircle2, LayoutTemplate, X,
+  Folder, Plus, Trash2, Save as SaveIcon
 } from 'lucide-react';
 import { StepSpec } from '../types';
+import { ProjectsStore, Project, SavedFile } from '../services/projectsStore';
+import { FileViewerModal } from './FileViewerModal';
 
 const Icons: Record<string, any> = {
   Lightbulb, Users, BookOpen, Image: ImageIcon,
@@ -28,6 +31,49 @@ export function Sidebar({
   onClose?: () => void,
   onActionClick?: (action: string, title: string, inputs: string[]) => void
 }) {
+  const store = ProjectsStore.getInstance();
+  const [projects, setProjects] = useState<Project[]>(store.projects);
+  const [activeProjectId, setActiveProjectId] = useState<string | null>(store.activeProjectId);
+  const [showCreatePrompt, setShowCreatePrompt] = useState(false);
+  const [newProjectName, setNewProjectName] = useState("");
+  const [newProjectDesc, setNewProjectDesc] = useState("");
+  const [selectedFileObj, setSelectedFileObj] = useState<SavedFile | null>(null);
+
+  useEffect(() => {
+    const unsub = store.subscribe(() => {
+      setProjects([...store.projects]);
+      setActiveProjectId(store.activeProjectId);
+    });
+    return unsub;
+  }, [store]);
+
+  const handleSaveCurrent = () => {
+    const pName = store.saveCurrentProject();
+    alert(`Все данные и файлы проекта "${pName}" успешно сохранены в локальную базу данных!`);
+  };
+
+  const handleLoadProject = (id: string) => {
+    if (confirm("Вы желаете загрузить этот проект? Это сменит активные данные, файлы и состояние всех разделов студии.")) {
+      store.loadProject(id);
+    }
+  };
+
+  const handleDeleteProject = (id: string) => {
+    if (confirm("Вы действительно хотите удалить этот проект? Это уничтожит все его сохраненные файлы.")) {
+      store.deleteProject(id);
+    }
+  };
+
+  const handleCreateProject = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newProjectName.trim()) return;
+    store.createProject(newProjectName, newProjectDesc);
+    setNewProjectName("");
+    setNewProjectDesc("");
+    setShowCreatePrompt(false);
+    alert("Проект успешно создан и запущен!");
+  };
+
   return (
     <div className="w-72 glass-panel border-r border-[var(--color-space-800)] h-full flex flex-col z-10 box-border shrink-0 shadow-[4px_0_24px_rgba(0,0,0,0.5)]">
       <div className="p-5 border-b border-[var(--color-space-800)] bg-black/20 flex justify-between items-start shrink-0">
@@ -206,7 +252,142 @@ export function Sidebar({
             </div>
           );
         })}
+
+        {/* РАЗДЕЛ: ПРОЕКТЫ И ФАЙЛЫ */}
+        <div className="pt-4 border-t border-slate-800/80 mt-4 flex flex-col gap-2">
+          <div className="flex items-center justify-between px-3 text-[10px] uppercase text-slate-400 font-bold tracking-widest">
+            <span className="flex items-center gap-1.5 text-[#00F0FF]">
+              <Folder className="w-3.5 h-3.5 text-[#00F0FF]" /> Проекты ({projects.length})
+            </span>
+            <button 
+              id="create-new-project-toggle-btn"
+              onClick={() => setShowCreatePrompt(true)}
+              className="p-1 rounded bg-[#00F0FF]/10 text-[#00F0FF] border border-[#00F0FF]/20 hover:bg-[#00F0FF]/25 hover:border-[#00F0FF]/50 transition-all flex items-center justify-center cursor-pointer"
+              title="Создать новый проект"
+            >
+              <Plus className="w-3 h-3" />
+            </button>
+          </div>
+
+          {/* Быстрая кнопка "СОХРАНИТЬ ВСЁ" */}
+          <div className="px-2">
+            <button
+              id="sidebar-save-project-btn"
+              onClick={handleSaveCurrent}
+              className="w-full flex items-center justify-center gap-2 p-2 bg-gradient-to-r from-[#00F0FF]/15 to-[#B026FF]/15 hover:from-[#00F0FF]/25 hover:to-[#B026FF]/25 border border-[#00F0FF]/30 hover:border-[#00F0FF]/60 text-[#00F0FF] rounded-lg text-xs font-bold uppercase tracking-wider transition-all shadow-[0_0_10px_rgba(0,240,255,0.05)] cursor-pointer"
+            >
+              <SaveIcon className="w-3.5 h-3.5" />
+              <span>Сохранить всё</span>
+            </button>
+          </div>
+
+          {/* Форма создания проекта */}
+          {showCreatePrompt && (
+            <form onSubmit={handleCreateProject} className="bg-[#101524] border border-[#00F0FF]/30 rounded-xl p-3 mx-2 flex flex-col gap-2 text-left animate-slide-in">
+              <span className="text-[9px] uppercase font-bold text-slate-400">Новый проект:</span>
+              <input 
+                type="text" 
+                placeholder="Название проекта" 
+                value={newProjectName} 
+                onChange={e => setNewProjectName(e.target.value)}
+                required
+                className="w-full bg-black/40 border border-slate-700/80 rounded p-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#00F0FF]/50"
+              />
+              <input 
+                type="text" 
+                placeholder="Краткое описание" 
+                value={newProjectDesc} 
+                onChange={e => setNewProjectDesc(e.target.value)}
+                className="w-full bg-black/40 border border-slate-700/80 rounded p-1.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-[#00F0FF]/50"
+              />
+              <div className="flex gap-1.5 justify-end">
+                <button 
+                  type="button" 
+                  onClick={() => setShowCreatePrompt(false)} 
+                  className="px-2 py-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] uppercase font-bold"
+                >
+                  Отмена
+                </button>
+                <button 
+                  type="submit" 
+                  className="px-2 py-1 rounded bg-[#00F0FF] text-black hover:bg-[#4dffff] text-[10px] uppercase font-bold"
+                >
+                  Создать
+                </button>
+              </div>
+            </form>
+          )}
+
+          {/* Список Проектов */}
+          <div className="flex flex-col gap-2 max-h-56 overflow-y-auto custom-scrollbar px-1 mt-1">
+            {projects.map(p => {
+              const isActive = p.id === activeProjectId;
+              return (
+                <div key={p.id} className={`rounded-lg border p-2 transition-all flex flex-col gap-1.5 ${
+                  isActive 
+                    ? 'bg-[#101524] border-[#00F0FF]/40 shadow-[0_0_8px_rgba(0,240,255,0.05)]' 
+                    : 'bg-black/20 border-slate-800 hover:border-slate-700'
+                }`}>
+                  <div className="flex items-center justify-between gap-1.5">
+                    <button 
+                      id={`load-project-${p.id}`}
+                      onClick={() => handleLoadProject(p.id)} 
+                      className={`text-xs font-bold text-left truncate flex-1 hover:text-[#00F0FF] transition-all cursor-pointer ${
+                        isActive ? 'text-white' : 'text-slate-400'
+                      }`}
+                      title="Кликните, чтобы загрузить этот проект"
+                    >
+                      📁 {p.name}
+                    </button>
+                    {projects.length > 1 && (
+                      <button 
+                        id={`delete-project-${p.id}`}
+                        onClick={(e) => { e.stopPropagation(); handleDeleteProject(p.id); }}
+                        className="p-1 px-1 rounded hover:bg-red-500/10 text-slate-500 hover:text-red-400 opacity-60 hover:opacity-100 transition-all"
+                        title="Удалить проект"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    )}
+                  </div>
+                  
+                  {p.description && (
+                    <p className="text-[10px] text-slate-500 leading-tight px-1 truncate">{p.description}</p>
+                  )}
+
+                  {/* Сгенерированные Файлы Проекта (показываем только для активного проекта) */}
+                  {isActive && (
+                    <div className="flex flex-col gap-1 border-t border-slate-800/80 pt-1.5 pl-1.5">
+                      <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider">Файлы проекта:</span>
+                      {p.files && p.files.length > 0 ? (
+                        p.files.map(f => (
+                          <button
+                            id={`view-file-${f.id}`}
+                            key={f.id}
+                            onClick={() => setSelectedFileObj(f)}
+                            className="text-[11px] text-slate-400 hover:text-white hover:bg-slate-800/50 px-1 py-1 rounded text-left truncate flex items-center gap-1 transition-all"
+                          >
+                            📄 {f.name}
+                          </button>
+                        ))
+                      ) : (
+                        <span className="text-[10px] text-slate-600 italic">Файлы отсутствуют. Нажмите сохранить.</span>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
       </div>
+
+      {selectedFileObj && (
+        <FileViewerModal 
+          file={selectedFileObj} 
+          onClose={() => setSelectedFileObj(null)} 
+        />
+      )}
     </div>
   );
 }

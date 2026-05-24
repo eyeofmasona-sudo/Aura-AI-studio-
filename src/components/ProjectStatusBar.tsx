@@ -18,10 +18,12 @@ export function ProjectStatusBar({
     <div className="h-14 w-full border-b border-[var(--color-space-800)] glass-panel rounded-none flex items-center justify-between px-3 sm:px-6 shrink-0 z-20 sticky top-0 shadow-[0_4px_15px_rgba(0,0,0,0.5)]">
       <div className="flex items-center gap-3 sm:gap-6">
         <button 
+          id="header-toggle-sidebar-btn"
           onClick={onToggleSidebar}
-          className="lg:hidden p-2 text-slate-300 hover:text-white transition-colors"
+          className="p-1.5 sm:p-2 text-slate-300 hover:text-[#00F0FF] hover:bg-[#00F0FF]/15 border border-slate-800 hover:border-[#00F0FF]/30 rounded-lg transition-all flex items-center justify-center cursor-pointer shadow-[0_0_10px_rgba(0,0,0,0.3)] bg-black/25"
+          title="Скрыть/показать панель навигации (сайдбар)"
         >
-          <Menu className="w-5 h-5" />
+          <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
 
         <div className="hidden sm:flex flex-col">
@@ -79,10 +81,12 @@ export function ProjectStatusBar({
         </div>
 
         <button 
+          id="header-toggle-assistant-btn"
           onClick={onToggleAssistant}
-          className="lg:hidden p-2 text-[#00F0FF] bg-[var(--color-space-800)] rounded flex items-center justify-center border border-[#00F0FF]/30 shadow-[0_0_10px_rgba(0,240,255,0.2)]"
+          className="p-1.5 sm:p-2 text-[#00F0FF] hover:text-white bg-[#00F0FF]/10 hover:bg-[#00F0FF]/25 border border-[#00F0FF]/30 hover:border-[#00F0FF]/60 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-[0_0_12px_rgba(0,240,255,0.15)]"
+          title="Скрыть/показать ИИ-помощника"
         >
-          <Bot className="w-4 h-4" />
+          <Bot className="w-4 h-4 sm:w-5 sm:h-5" />
         </button>
       </div>
     </div>
