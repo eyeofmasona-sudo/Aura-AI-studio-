@@ -13,9 +13,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Prompt is required' });
     }
 
+    // Normalize duration: "5 сек" -> "5 seconds"
+    const normalizedDuration = (duration || '5 seconds')
+      .replace(/сек/gi, 'seconds')
+      .replace(/мин/gi, 'minutes')
+      .trim();
+
     const parts: any[] = [
       {
-        text: `Generate a cinematic video scene. ${prompt}. Duration: ${duration}. Camera movement: ${cameraMovement}.`
+        text: `Generate a cinematic video scene. ${prompt}. Duration: ${normalizedDuration}. Camera movement: ${cameraMovement}.`
       }
     ];
 

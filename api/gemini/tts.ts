@@ -60,11 +60,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!text) return res.status(400).json({ error: 'Text is required' });
 
     const client = new GoogleGenAI({ apiKey });
-    const contents = text;
 
     const stream = await client.models.generateContentStream({
       model: 'gemini-3.1-flash-tts-preview',
-      contents,
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text }],
+        },
+      ],
       config: {
         temperature: 1,
         responseModalities: ['audio'],
