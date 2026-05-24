@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { GoogleGenAI } from '@google/genai';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
@@ -19,14 +20,23 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       .replace(/мин/gi, 'minutes')
       .trim();
 
-    const parts: any[] = [
-      {
-        text: `Generate a cinematic video scene. ${prompt}. Duration: ${normalizedDuration}. Camera movement: ${cameraMovement}.`
-      }
-    ];
+    const client = new GoogleGenAI({ apiKey });
 
+    // Extract seconds from duration string
+    const durationMatch = normalizedDuration.match(/(\d+)\s*seconds?/i);
+    const durationSeconds = durationMatch ? parseInt(durationMatch[1], 10) : 5;
+
+    const generateParams: any = {
+      model: 'veo-3.1-lite',
+      prompt: `Generate a cinematic video scene. ${prompt}. Camera movement: ${cameraMovement}.`,
+      config: {
+        durationSeconds,
+        numberOfVideos: 1,
+      },
+    };
+
+    // Add first frame if provided
     if (firstFrameImage) {
-      // If firstFrameImage is a URL string, fetch and convert to base64
       let imageData = firstFrameImage;
       if (typeof firstFrameImage === 'string' && firstFrameImage.startsWith('http')) {
         try {
@@ -39,41 +49,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         }
       }
 
-      if (imageData) {
-        parts.push({
-          inline_data: {
-            mime_type: 'image/jpeg',
-            data: imageData
-          }
-        });
+      if (imageData && typeof imageData === 'string') {
+        generateParams.image = {
+          imageBytes: imageData,
+          mimeType: 'image/jpeg',
+        };
       }
     }
 
-    const requestBody = {
-      contents: [{ role: 'user', parts }]
-    };
+    // Call video generation
+    let operation = await client.models.generateVideos(generateParams);
 
-    const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/veo-3.1-lite-generate-preview:generateContent?key=${apiKey}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(requestBody)
+    // Poll for completion (with timeout)
+    const deadline = Date.now() + 10 * 60 * 1000; // 10 minute timeout
+    while (!operation.done) {
+      if (Date.now() > deadline) {
+        return res.status(504).json({ error: 'Video generation timed out' });
       }
-    );
-
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      return res.status(response.status).json({
-        error: errorData.error?.message || response.statusText
-      });
+      await new Promise((r) => setTimeout(r, 3000)); // Wait 3 seconds before polling
+      operation = await (client.operations as any).getVideosOperation({ operation });
     }
 
-    const data = await response.json();
+    const videos = (operation.response as any)?.generatedVideos ?? [];
+    if (!videos.length) {
+      return res.status(500).json({ error: 'No videos generated' });
+    }
 
+    // Return first video in format compatible with VideoGeneratorModule
+    const video = videos[0];
     res.setHeader('Content-Type', 'application/json');
     res.setHeader('Cache-Control', 'no-cache');
-    return res.status(200).json(data);
+
+    return res.status(200).json({
+      candidates: [
+        {
+          content: {
+            parts: [
+              {
+                inline_data: {
+                  data: video.video?.videoBytes || null,
+                  mime_type: video.video?.mimeType || 'video/mp4',
+                }
+              }
+            ]
+          }
+        }
+      ]
+    });
   } catch (err: any) {
     console.error('[/api/gemini/video]', err);
     return res.status(500).json({ error: err.message || 'Failed to generate video' });
