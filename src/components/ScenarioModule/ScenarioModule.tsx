@@ -1108,7 +1108,7 @@ Example output schema to follow exactly:
                 </div>
 
                 {/* Chapter Editor */}
-                {state.selectedChapterId && (
+                {state.selectedChapterId ? (
                   <div className="w-full md:w-2/3 bg-black/40 border border-slate-800 rounded-xl p-4 flex flex-col gap-4">
                     {(() => {
                       const c = state.chapters.find(ch => ch.id === state.selectedChapterId);
@@ -1145,6 +1145,11 @@ Example output schema to follow exactly:
                         </>
                       )
                     })()}
+                  </div>
+                ) : (
+                  <div className="w-full md:w-2/3 bg-black/40 border border-dashed border-slate-700 rounded-xl p-8 flex flex-col items-center justify-center min-h-[300px]">
+                    <Wand2 className="w-12 h-12 text-slate-500 mb-4 opacity-50" />
+                    <p className="text-slate-400 text-sm text-center">Выберите главу из списка слева чтобы редактировать её детали</p>
                   </div>
                 )}
               </div>
@@ -1212,7 +1217,7 @@ Example output schema to follow exactly:
                   </div>
                 </div>
 
-                {state.selectedSceneId && (
+                {state.selectedSceneId ? (
                   <div className="w-full lg:w-2/3 bg-black/40 border border-slate-800 rounded-xl p-4 flex flex-col gap-4">
                     {(() => {
                       const sc = state.scenes.find(s => s.id === state.selectedSceneId);
@@ -1258,6 +1263,11 @@ Example output schema to follow exactly:
                         </>
                       )
                     })()}
+                  </div>
+                ) : (
+                  <div className="w-full lg:w-2/3 bg-black/40 border border-dashed border-slate-700 rounded-xl p-8 flex flex-col items-center justify-center min-h-[300px]">
+                    <Wand2 className="w-12 h-12 text-slate-500 mb-4 opacity-50" />
+                    <p className="text-slate-400 text-sm text-center">Выберите сцену из списка слева чтобы редактировать её детали</p>
                   </div>
                 )}
               </div>
