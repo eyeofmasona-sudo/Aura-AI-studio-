@@ -541,8 +541,7 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
                     </span>
                   </div>
 
-                  <div 
-                    ref={fileInputRef as any}
+                  <div
                     onDragOver={e => { e.preventDefault(); setIsDragging(true); }}
                     onDragLeave={() => setIsDragging(false)}
                     onDrop={handleAudioDrop}
