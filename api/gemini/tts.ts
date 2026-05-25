@@ -62,7 +62,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const client = new GoogleGenAI({ apiKey });
 
     const stream = await client.models.generateContentStream({
-      model: 'gemini-3.1-flash-tts-preview',
+      model: process.env.GOOGLE_AI_TTS_MODEL || 'gemini-3.5-flash',
       contents: [
         {
           role: 'user',

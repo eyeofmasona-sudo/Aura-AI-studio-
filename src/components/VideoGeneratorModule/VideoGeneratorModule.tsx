@@ -1071,22 +1071,26 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
                         if (!selectedVideo) return null;
                         return (
                           <div className="w-full h-full relative group">
-                            <img 
-                              src={selectedVideo.previewUrl} 
-                              alt="Generated Scene Video" 
-                              className="w-full h-full object-cover" 
+                            <video 
+                              src={selectedVideo.url} 
+                              controls
+                              autoPlay
+                              loop
+                              className="w-full h-full object-contain bg-black" 
+                              poster={selectedVideo.previewUrl !== selectedVideo.url ? selectedVideo.previewUrl : undefined}
                             />
-                            
-                            {/* Overlay control layer */}
-                            <div className="absolute inset-0 bg-black/30 opacity-100 flex items-center justify-center transition-all">
-                              <div className="w-12 h-12 rounded-full bg-[#00F0FF] text-black flex items-center justify-center shadow-lg transform scale-100 hover:scale-110 transition-transform">
-                                <Play className="w-5 h-5 fill-current ml-0.5" />
-                              </div>
-                            </div>
 
-                            <div className="absolute bottom-2 left-2 bg-black/70 border border-slate-800 px-2.5 py-1 rounded text-[9px] text-[#00F0FF] font-bold uppercase tracking-widest leading-none">
+                            <div className="absolute bottom-2 left-2 bg-black/70 border border-slate-800 px-2.5 py-1 rounded text-[9px] text-[#00F0FF] font-bold uppercase tracking-widest leading-none pointer-events-none">
                               {selectedVideo.motionType} • {selectedBlock.duration}
                             </div>
+                            
+                            <a 
+                              href={selectedVideo.url} 
+                              download={`video-${selectedVideo.id}.mp4`}
+                              className="absolute top-2 right-2 bg-black/70 hover:bg-[#00F0FF] text-[#00F0FF] hover:text-black border border-slate-800 hover:border-[#00F0FF] px-3 py-1.5 rounded text-[10px] font-bold uppercase tracking-widest transition-colors z-10"
+                            >
+                              Скачать
+                            </a>
                           </div>
                         );
                       })()
@@ -1136,7 +1140,7 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
                           }`}
                         >
                           <div className="w-16 h-10 bg-black rounded overflow-hidden shrink-0 border border-slate-700">
-                            <img src={vid.previewUrl} alt="" className="w-full h-full object-cover" />
+                            <video src={vid.url} className="w-full h-full object-cover pointer-events-none" muted />
                           </div>
                           <div className="flex-1 min-w-0 flex flex-col">
                             <span className="text-[10px] text-slate-400 font-bold uppercase">Вариация • {vid.timestamp}</span>
@@ -1207,7 +1211,7 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
                   </div>
 
                   <div className="aspect-video bg-black rounded overflow-hidden relative">
-                    <img src={clip.videoUrl} alt="" className="w-full h-full object-cover" />
+                    <video src={clip.videoUrl} controls className="w-full h-full object-contain" />
                     
                     {/* Tiny first/last indicator previews on timeline card */}
                     <div className="absolute bottom-2 right-2 flex gap-1 bg-black/60 p-1 rounded border border-slate-800">

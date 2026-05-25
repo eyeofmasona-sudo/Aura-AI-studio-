@@ -37,7 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!text) return res.status(400).json({ error: 'text is required' });
 
     const ai = new GoogleGenAI({ apiKey });
-    const ttsModel = process.env.GOOGLE_AI_TTS_MODEL || 'gemini-3.1-flash-tts-preview';
+    const ttsModel = process.env.GOOGLE_AI_TTS_MODEL || 'gemini-3.5-flash';
     const response = await ai.models.generateContent({
       model: ttsModel,
       contents: [{ role: 'user', parts: [{ text }] }],

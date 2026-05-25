@@ -302,7 +302,7 @@ CRITICAL RULES:
       const { text, voiceName = "Kore", speakingRate = 1.0 } = req.body;
       if (!text) return res.status(400).json({ error: "text is required" });
 
-      const ttsModel = process.env.GOOGLE_AI_TTS_MODEL || "gemini-3.1-flash-tts-preview";
+      const ttsModel = process.env.GOOGLE_AI_TTS_MODEL || "gemini-3.5-flash";
       const response = await ai.models.generateContent({
         model: ttsModel,
         contents: [{ role: "user", parts: [{ text }] }],
@@ -366,7 +366,7 @@ CRITICAL RULES:
     res.json({
       video: { model: process.env.GOOGLE_AI_VIDEO_MODEL || "veo-3.1-generate-preview", enabled: !!effectiveApiKey },
       image: { model: process.env.GOOGLE_AI_IMAGE_MODEL || "gemini-2.5-flash-image", enabled: !!effectiveApiKey },
-      tts:   { model: process.env.GOOGLE_AI_TTS_MODEL || "gemini-3.1-flash-tts-preview", enabled: !!effectiveApiKey },
+      tts:   { model: process.env.GOOGLE_AI_TTS_MODEL || "gemini-3.5-flash", enabled: !!effectiveApiKey },
       music: { model: process.env.GOOGLE_AI_MUSIC_MODEL || "lyria-3-pro-preview", enabled: !!effectiveApiKey },
     });
   });
