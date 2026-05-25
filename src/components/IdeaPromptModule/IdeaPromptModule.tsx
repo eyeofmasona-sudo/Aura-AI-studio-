@@ -421,6 +421,7 @@ export function IdeaPromptModule({
             inputs: [
               `Идея: ${context}`,
               languageInstruction,
+              `СТРОГИЕ ПРАВИЛА: Категорически запрещено изменять суть оригинальной идеи! Не меняй животных на людей. Персонажами могут быть животные.`,
               `Верни ТОЛЬКО валидный JSON массив объектов (от 1 до 3). Формат: [{"id": "1", "name": "имя", "role": "роль", "archetype": "архетип", "visualDescription": "описание", "psychology": "психология", "videoPrompt": "English prompt", "validationErrors": {}}]`
             ],
             specTitle: "Магия"
@@ -452,6 +453,7 @@ export function IdeaPromptModule({
             characterContext,
             `Создай ровно ${sceneCount} сцен. Каждая сцена длится ${state.magicClipDuration} секунд. Общая длительность фильма: ${state.magicDuration} секунд.`,
             languageInstruction,
+            `СТРОГИЕ ПРАВИЛА: Категорически запрещено изменять суть оригинальной идеи! Не меняй животных на людей. Не меняй локации из идеи. Если в идее присутствует диалог, строго сохраняй его язык без изменений.`,
             `Верни ТОЛЬКО валидный JSON массив объектов. Формат: [{"id": "1", "title": "название", "description": "описание", "location": "локация", "characters": ["имя"], "videoPrompt": "English cinematic prompt for Veo", "duration": "${state.magicClipDuration} сек", "cameraMovement": "static"}]`
           ],
           specTitle: "Магия"
