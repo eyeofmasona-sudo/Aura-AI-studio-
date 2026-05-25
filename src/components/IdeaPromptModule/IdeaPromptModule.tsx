@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AiStore } from '../../services/aiStore';
+import { ProjectsStore } from '../../services/projectsStore';
 
 interface IdeaState {
   uploadedAudioFile: File | null;
@@ -213,9 +214,22 @@ export function IdeaPromptModule({
     }));
   };
 
-  const improveIdea = () => runAiAction('Улучшить идею', 'Опираясь на жанр, настроение и эпоху, улучши идею. Верни только саму улучшенную идею, без лишних слов, без вступлений и без комментариев.', res => setState(s => ({ ...s, ideaText: res })));
-  const makeIdeaCinematic = () => runAiAction('Сделать кинематографичнее', 'Добавь визуальных деталей, сделай кинематографично', res => setState(s => ({ ...s, ideaText: res })));
-  const expandIdeaToConcept = () => runAiAction('Развернуть в концепт', 'Напиши подробный концепт', res => setState(s => ({ ...s, ideaText: res })));
+  const handleIdeaResponse = (res: string) => {
+    const loglineMatch = res.match(/###\s*Логлайн\s*\n?([^#]+)/i) || res.match(/\*\*Логлайн:?\*\*\s*\n?([^#\n]+)/i);
+    const synopsisMatch = res.match(/###\s*Синопсис\s*\n?([^#]+)/i) || res.match(/\*\*Синопсис:?\*\*\s*\n?([^#]+)/i);
+    
+    let newLogline = state.generatedLogline;
+    let newSynopsis = state.generatedSynopsis;
+
+    if (loglineMatch && loglineMatch[1]) newLogline = loglineMatch[1].trim();
+    if (synopsisMatch && synopsisMatch[1]) newSynopsis = synopsisMatch[1].trim();
+
+    setState(s => ({ ...s, ideaText: res, generatedLogline: newLogline, generatedSynopsis: newSynopsis }));
+  };
+
+  const improveIdea = () => runAiAction('Улучшить идею', 'Опираясь на жанр, настроение и эпоху, улучши идею. Верни только саму улучшенную идею, без лишних слов, без вступлений и без комментариев. ОБЯЗАТЕЛЬНО включи в ответ блоки с точными заголовками "### Логлайн" и "### Синопсис".', handleIdeaResponse);
+  const makeIdeaCinematic = () => runAiAction('Сделать кинематографичнее', 'Добавь визуальных деталей, сделай кинематографично. Если меняешь сюжет, ОБЯЗАТЕЛЬНО включи блоки "### Логлайн" и "### Синопсис".', handleIdeaResponse);
+  const expandIdeaToConcept = () => runAiAction('Развернуть в концепт', 'Напиши подробный концепт. Обязательно включи блоки "### Логлайн" и "### Синопсис".', handleIdeaResponse);
   const generateSimilarIdeas = () => runAiAction('Предложить 5 похожих идей', 'Верни 5 альтернатив', res => setState(s => ({ ...s, ideaText: s.ideaText + '\n\nПохожие идеи:\n' + res })));
   
   const analyzeAudio = async () => {
@@ -252,7 +266,7 @@ export function IdeaPromptModule({
           }
           
           const data = await response.json();
-          setState(s => ({ ...s, ideaText: data.result }));
+          handleIdeaResponse(data.result);
           setIsAiLoading(prev => ({ ...prev, ['Анализ аудио']: false }));
         } catch (err: any) {
           console.error(err);
@@ -330,6 +344,11 @@ export function IdeaPromptModule({
 
   const copyFinalPrompt = () => {
     navigator.clipboard.writeText(state.finalPrompt);
+  };
+
+  const handleSaveLocally = () => {
+    const pName = ProjectsStore.getInstance().saveCurrentProject();
+    alert(`Идея успешно сохранена в проект "${pName}"! Вы найдете сгенерированный Markdown файл (1_Идея_и_Солид.md) в левом сайдбаре проекта.`);
   };
 
   return (
@@ -562,7 +581,7 @@ export function IdeaPromptModule({
             {/* Actions for next steps */}
             <div className="flex flex-col gap-2 w-full">
               <div className="flex flex-wrap gap-3 mt-2 justify-end">
-                <button className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--color-space-800)] border border-slate-600 text-sm font-bold text-slate-200 hover:bg-slate-700 transition-colors">
+                <button onClick={handleSaveLocally} className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[var(--color-space-800)] border border-slate-600 text-sm font-bold text-slate-200 hover:bg-slate-700 transition-colors">
                   <Save className="w-4 h-4" /> Сохранить локально
                 </button>
                 <button 
