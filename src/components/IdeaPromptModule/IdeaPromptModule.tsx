@@ -218,6 +218,62 @@ export function IdeaPromptModule({
   const expandIdeaToConcept = () => runAiAction('Развернуть в концепт', 'Напиши подробный концепт', res => setState(s => ({ ...s, ideaText: res })));
   const generateSimilarIdeas = () => runAiAction('Предложить 5 похожих идей', 'Верни 5 альтернатив', res => setState(s => ({ ...s, ideaText: s.ideaText + '\n\nПохожие идеи:\n' + res })));
   
+  const analyzeAudio = async () => {
+    if (!state.uploadedAudioFile) return;
+    
+    if (state.uploadedAudioFile.size > 3.3 * 1024 * 1024) {
+      alert("Файл слишком большой для прямого анализа ИИ (лимит Vercel ~3.3 МБ). Пожалуйста, загрузите более короткий отрывок.");
+      return;
+    }
+
+    setIsAiLoading(prev => ({ ...prev, ['Анализ аудио']: true }));
+    
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const result = e.target?.result as string;
+          if (!result) throw new Error("Failed to read file");
+          
+          const base64Data = result.split(',')[1];
+          
+          const response = await fetch('/api/gemini/analyze-audio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              audioData: base64Data,
+              mimeType: state.uploadedAudioFile!.type || 'audio/mp3',
+            })
+          });
+          
+          if (!response.ok) {
+             const errData = await response.json().catch(() => ({}));
+             throw new Error(errData.error || response.statusText);
+          }
+          
+          const data = await response.json();
+          setState(s => ({ ...s, ideaText: data.result }));
+          setIsAiLoading(prev => ({ ...prev, ['Анализ аудио']: false }));
+        } catch (err: any) {
+          console.error(err);
+          alert(`Ошибка при запросе: ${err.message}`);
+          setIsAiLoading(prev => ({ ...prev, ['Анализ аудио']: false }));
+        }
+      };
+      
+      reader.onerror = () => {
+        alert("Ошибка при чтении аудиофайла");
+        setIsAiLoading(prev => ({ ...prev, ['Анализ аудио']: false }));
+      };
+      
+      reader.readAsDataURL(state.uploadedAudioFile);
+    } catch (err: any) {
+      console.error(err);
+      alert(`Ошибка при анализе аудио: ${err.message}`);
+      setIsAiLoading(prev => ({ ...prev, ['Анализ аудио']: false }));
+    }
+  };
+  
   const generateLogline = () => runAiAction('Создать логлайн', 'Напиши 1 короткое предложение', res => setState(s => ({ ...s, generatedLogline: res })));
   const generateSynopsis = () => runAiAction('Создать синопсис', 'Напиши 3 абзаца синопсиса', res => setState(s => ({ ...s, generatedSynopsis: res })));
   const generateMoodboard = () => {
@@ -318,7 +374,15 @@ export function IdeaPromptModule({
                   <div className="flex flex-col items-center gap-2 w-full">
                     <FileAudio className="w-8 h-8 text-emerald-400 mb-1" />
                     <span className="text-xs font-semibold text-emerald-300 truncate w-full px-4">{state.uploadedAudioFile.name}</span>
-                    <div className="flex gap-2 mt-2">
+                    <div className="flex gap-2 mt-2 flex-wrap justify-center">
+                      <button 
+                        onClick={analyzeAudio} 
+                        disabled={isAiLoading['Анализ аудио']}
+                        className="px-3 py-1.5 rounded bg-emerald-500/20 hover:bg-emerald-500/40 border border-emerald-500/50 text-[10px] uppercase font-bold text-emerald-300 transition-colors flex items-center gap-1"
+                      >
+                        {isAiLoading['Анализ аудио'] ? <Loader2 className="w-3 h-3 animate-spin"/> : <Sparkles className="w-3 h-3"/>}
+                        Генерировать идею
+                      </button>
                       <button onClick={openAudioUpload} className="px-3 py-1.5 rounded bg-black/40 hover:bg-black/60 border border-slate-600 text-[10px] uppercase font-bold text-slate-300">Заменить</button>
                       <button onClick={removeAudioFile} className="px-3 py-1.5 rounded bg-black/40 hover:bg-black/60 border border-red-500/30 text-[10px] uppercase font-bold text-red-400">Удалить</button>
                     </div>
