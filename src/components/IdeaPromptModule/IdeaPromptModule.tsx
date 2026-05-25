@@ -553,9 +553,19 @@ export function IdeaPromptModule({
                   transition: "cut",
                   promptMatched: block.scenePrompt
                 });
-             }
-          }
-        } catch(e) { console.warn(`Видео ${i + 1} ошибка:`, e); }
+              } else {
+                 throw new Error("Не удалось загрузить видео. Возможно, произошел таймаут сервера (Vercel max 10s-60s) или ошибка генерации.");
+              }
+           } else {
+              const errText = await vRes.text();
+              throw new Error(`Ошибка от сервера: ${vRes.status} ${vRes.statusText} - ${errText}`);
+           }
+        } catch(e: any) { 
+          console.error(`Видео ${i + 1} ошибка:`, e); 
+          setState(s => ({ ...s, isMagicRunning: false, magicStatusText: `Ошибка при генерации сцены ${i + 1}` }));
+          alert(`Ошибка при генерации сцены ${i + 1}:\n${e?.message || e}\n\nЕсли вы на бесплатном тарифе Vercel, возможно сервер отклонил долгий запрос по тайм-ауту.`);
+          return; // Stop pipeline
+        }
       }
       
       localStorage.setItem('video_generator_blocks', JSON.stringify(videoBlocks));
