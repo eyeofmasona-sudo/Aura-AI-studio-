@@ -348,13 +348,13 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
       }
 
       const voiceNameMap: Record<string, string> = {
-        'мужской': 'Chant',
-        'женский': 'Phoebe',
-        'нейтральный': 'Zephyr',
-        'детский': 'Breeze',
-        'пожилой': 'Chant',
-        'персонажный': 'Chant',
-        'дикторский': 'Chant'
+        'мужской': 'fenrir',
+        'женский': 'aoede',
+        'нейтральный': 'zephyr',
+        'детский': 'puck',
+        'пожилой': 'charon',
+        'персонажный': 'kore',
+        'дикторский': 'fenrir'
       };
 
       const response = await fetch('/api/gemini/tts', {
