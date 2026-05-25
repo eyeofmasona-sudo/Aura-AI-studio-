@@ -121,4 +121,8 @@ body {
   scrollbar-width: none;
 }
 
-
+/* Global button click feedback */
+button:active:not(:disabled) {
+  transform: scale(0.96);
+  transition: transform 0.05s ease-out;
+}

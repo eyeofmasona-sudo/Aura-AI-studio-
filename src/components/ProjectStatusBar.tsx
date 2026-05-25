@@ -15,12 +15,12 @@ export function ProjectStatusBar({
   onToggleAssistant: () => void;
 }) {
   return (
-    <div className="h-14 w-full border-b border-[var(--color-space-800)] glass-panel rounded-none flex items-center justify-between px-3 sm:px-6 shrink-0 z-20 sticky top-0 shadow-[0_4px_15px_rgba(0,0,0,0.5)]">
+    <div className="min-h-[56px] py-2 w-full border-b border-[var(--color-space-700)] glass-panel rounded-none flex flex-wrap items-center justify-between gap-3 px-3 sm:px-6 shrink-0 z-30 sticky top-0 shadow-[0_4px_15px_rgba(0,0,0,0.5)]">
       <div className="flex items-center gap-3 sm:gap-6">
         <button 
           id="header-toggle-sidebar-btn"
           onClick={onToggleSidebar}
-          className="p-1.5 sm:p-2 text-slate-300 hover:text-[#00F0FF] hover:bg-[#00F0FF]/15 border border-slate-800 hover:border-[#00F0FF]/30 rounded-lg transition-all flex items-center justify-center cursor-pointer shadow-[0_0_10px_rgba(0,0,0,0.3)] bg-black/25"
+          className="p-1.5 sm:p-2 text-slate-100 hover:text-[#00F0FF] hover:bg-[#00F0FF]/15 border border-slate-500 hover:border-[#00F0FF]/50 rounded-lg transition-all flex items-center justify-center cursor-pointer shadow-[0_0_10px_rgba(0,0,0,0.3)] bg-slate-800/60 active:scale-90"
           title="Скрыть/показать панель навигации (сайдбар)"
         >
           <Menu className="w-4 h-4 sm:w-5 sm:h-5" />
@@ -56,7 +56,7 @@ export function ProjectStatusBar({
         {onUnlockAll && (
           <button 
             onClick={onUnlockAll}
-            className="hidden sm:flex items-center gap-2 cyber-btn px-3 py-1.5 rounded-md text-[#B026FF] font-bold"
+            className="hidden sm:flex items-center gap-2 cyber-btn px-3 py-1.5 rounded-md text-[#B026FF] font-bold active:scale-95 transition-transform"
           >
             <Unlock className="w-3.5 h-3.5" /> Свободный доступ
           </button>
@@ -83,7 +83,7 @@ export function ProjectStatusBar({
         <button 
           id="header-toggle-assistant-btn"
           onClick={onToggleAssistant}
-          className="p-1.5 sm:p-2 text-[#00F0FF] hover:text-white bg-[#00F0FF]/10 hover:bg-[#00F0FF]/25 border border-[#00F0FF]/30 hover:border-[#00F0FF]/60 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-[0_0_12px_rgba(0,240,255,0.15)]"
+          className="p-1.5 sm:p-2 text-[#00F0FF] hover:text-white bg-[#00F0FF]/20 hover:bg-[#00F0FF]/30 border border-[#00F0FF]/50 hover:border-[#00F0FF]/80 rounded-lg flex items-center justify-center transition-all cursor-pointer shadow-[0_0_15px_rgba(0,240,255,0.2)] active:scale-90"
           title="Скрыть/показать ИИ-помощника"
         >
           <Bot className="w-4 h-4 sm:w-5 sm:h-5" />

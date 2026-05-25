@@ -163,7 +163,7 @@ export default function App() {
         />
         
         <div className="flex-1 overflow-y-auto px-4 md:px-6 lg:px-8 xl:px-10 pt-6 sm:pt-8 pb-20 relative custom-scrollbar bg-[var(--color-space-900)]">
-          <div className="absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-[var(--color-space-950)] to-transparent pointer-events-none z-10"></div>
+          <div className="absolute top-0 left-0 w-full h-40 bg-gradient-to-b from-[var(--color-space-900)] to-transparent pointer-events-none z-10 opacity-40"></div>
           
           <AnimatePresence mode="wait">
             {isFocusMode && (
