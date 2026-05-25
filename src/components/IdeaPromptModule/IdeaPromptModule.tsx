@@ -13,10 +13,10 @@ interface IdeaState {
   selectedGenres: string[];
   selectedMoods: string[];
   selectedEra: string | null;
-  selectedVisualStyle: string | null;
-  selectedCameraStyle: string | null;
   generatedLogline: string;
   generatedSynopsis: string;
+  generatedDialogue: string;
+  selectedDialogueMood: string;
   generatedMoodboard: string[];
   finalPrompt: string;
   aiSuggestions: any[];
@@ -37,10 +37,10 @@ export function IdeaPromptModule({
     selectedGenres: [],
     selectedMoods: [],
     selectedEra: null,
-    selectedVisualStyle: null,
-    selectedCameraStyle: null,
     generatedLogline: "",
     generatedSynopsis: "",
+    generatedDialogue: "",
+    selectedDialogueMood: "Напряженный",
     generatedMoodboard: [],
     finalPrompt: "",
     aiSuggestions: [],
@@ -75,8 +75,6 @@ export function IdeaPromptModule({
       selectedGenres: state.selectedGenres,
       selectedMoods: state.selectedMoods,
       selectedEra: state.selectedEra,
-      selectedVisualStyle: state.selectedVisualStyle,
-      selectedCameraStyle: state.selectedCameraStyle,
       uploadedAudioFileMeta: state.uploadedAudioFile ? {
         name: state.uploadedAudioFile.name,
         size: state.uploadedAudioFile.size,
@@ -133,8 +131,6 @@ export function IdeaPromptModule({
     "Прошлое", "Настоящее", "Будущее", "Альтернативная история", "Средневековье", 
     "80-е", "90-е", "2000-е", "Постапокалипсис", "Далёкое будущее"
   ];
-  const VISUALS = ["Кинематографичный", "Аниме", "Комикс", "Реализм", "Пиксель-арт", "Неоновый", "Пленочный"];
-  const CAMERAS = ["Широкоугольная", "Крупный план", "Дрон", "Голландский угол", "От первого лица", "Статичная"];
 
   // A. Upload Audio
   const handleAudioDrop = (e: React.DragEvent) => {
@@ -185,6 +181,7 @@ export function IdeaPromptModule({
         "Создать логлайн": "generateLogline",
         "Создать синопсис": "generateSynopsis",
         "Создать мудборд": "generateMoodboard",
+        "Создать диалог": "generateDialogue",
         "Собрать финальный промпт": "assemblePrompt",
         "Улучшить финальный промпт": "improveFinalPrompt",
         "Анализ аудио": "audioAnalysis",
@@ -216,7 +213,7 @@ export function IdeaPromptModule({
     }));
   };
 
-  const improveIdea = () => runAiAction('Улучшить идею', 'Сделай идею глубже, распиши', res => setState(s => ({ ...s, ideaText: res })));
+  const improveIdea = () => runAiAction('Улучшить идею', 'Опираясь на жанр, настроение и эпоху, улучши идею. Верни только саму улучшенную идею, без лишних слов, без вступлений и без комментариев.', res => setState(s => ({ ...s, ideaText: res })));
   const makeIdeaCinematic = () => runAiAction('Сделать кинематографичнее', 'Добавь визуальных деталей, сделай кинематографично', res => setState(s => ({ ...s, ideaText: res })));
   const expandIdeaToConcept = () => runAiAction('Развернуть в концепт', 'Напиши подробный концепт', res => setState(s => ({ ...s, ideaText: res })));
   const generateSimilarIdeas = () => runAiAction('Предложить 5 похожих идей', 'Верни 5 альтернатив', res => setState(s => ({ ...s, ideaText: s.ideaText + '\n\nПохожие идеи:\n' + res })));
@@ -230,6 +227,8 @@ export function IdeaPromptModule({
     });
   };
 
+  const generateDialogue = () => runAiAction('Создать диалог', `Напиши небольшой диалог между главными героями. Настроение диалога: ${state.selectedDialogueMood}. Не пиши ничего кроме самого диалога.`, res => setState(s => ({ ...s, generatedDialogue: res })));
+
   const buildFinalPrompt = () => {
     const parts = [
       `Название: ${state.ideaText ? "Проект" : "Без названия"}`,
@@ -237,7 +236,6 @@ export function IdeaPromptModule({
       `Жанр: ${state.selectedGenres.length > 0 ? state.selectedGenres.join(', ') : "Не указан"}`,
       `Настроение: ${state.selectedMoods.length > 0 ? state.selectedMoods.join(', ') : "Не указано"}`,
       `Эпоха: ${state.selectedEra || "Не указана"}`,
-      `Визуальный стиль: ${state.selectedVisualStyle || "Не указан"} | Камера: ${state.selectedCameraStyle || "Не указана"}`,
       state.generatedLogline ? `Логлайн: ${state.generatedLogline}` : "",
       state.generatedSynopsis ? `Синопсис: ${state.generatedSynopsis}` : "",
       state.generatedMoodboard.length > 0 ? `Мудборд: ${state.generatedMoodboard.join(', ')}` : "",
@@ -363,8 +361,6 @@ export function IdeaPromptModule({
               <MultiSelectorBlock title="Жанр" options={GENRES} selected={state.selectedGenres} onSelect={v => selectMultiParam('selectedGenres', v)} />
               <MultiSelectorBlock title="Настроение" options={MOODS} selected={state.selectedMoods} onSelect={v => selectMultiParam('selectedMoods', v)} />
               <SelectorBlock title="Эпоха" options={ERAS} selected={state.selectedEra} onSelect={v => selectParam('selectedEra', v)} />
-              <SelectorBlock title="Визуальный Стиль" options={VISUALS} selected={state.selectedVisualStyle} onSelect={v => selectParam('selectedVisualStyle', v)} />
-              <SelectorBlock title="Стиль Камеры" options={CAMERAS} selected={state.selectedCameraStyle} onSelect={v => selectParam('selectedCameraStyle', v)} />
             </div>
           </div>
 
@@ -403,6 +399,36 @@ export function IdeaPromptModule({
                 isLoading={isAiLoading['Создать синопсис']}
                 generateLabel="Создать синопсис"
                 multiline
+              />
+            </div>
+            
+            <div className="bg-black/40 border border-slate-700/50 rounded-xl p-3 flex flex-col gap-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Диалог между героями</span>
+                <div className="flex items-center gap-2">
+                  <select 
+                    value={state.selectedDialogueMood} 
+                    onChange={e => setState(s => ({ ...s, selectedDialogueMood: e.target.value }))}
+                    className="bg-black/60 border border-slate-700 rounded p-1 text-[10px] text-white outline-none focus:border-[#00F0FF]/50"
+                  >
+                    {["Напряженный", "Смешной", "Драматичный", "Обыденный", "Романтичный", "Конфликтный"].map(m => (
+                      <option key={m} value={m}>{m}</option>
+                    ))}
+                  </select>
+                  <button 
+                    onClick={generateDialogue}
+                    disabled={isAiLoading['Создать диалог']}
+                    className="px-2 py-1 rounded bg-black/60 border border-slate-600 hover:border-[#00F0FF]/50 hover:text-[#00F0FF] text-[9px] uppercase font-bold text-slate-400 transition-colors flex items-center gap-1 disabled:opacity-50"
+                  >
+                    {isAiLoading['Создать диалог'] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Wand2 className="w-3 h-3" />} Сгенерировать
+                  </button>
+                </div>
+              </div>
+              <textarea 
+                value={state.generatedDialogue}
+                onChange={e => setState(s => ({ ...s, generatedDialogue: e.target.value }))}
+                placeholder="Сгенерируйте диалог..."
+                className="w-full bg-transparent border border-slate-800 rounded p-2 text-xs text-slate-300 outline-none focus:border-slate-500 resize-none h-32 custom-scrollbar"
               />
             </div>
             
