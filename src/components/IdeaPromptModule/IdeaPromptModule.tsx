@@ -383,7 +383,8 @@ export function IdeaPromptModule({
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
         if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        resolve(canvas.toDataURL('image/jpeg', 0.9));
+        // Compress the image to save localStorage quota
+        resolve(canvas.toDataURL('image/jpeg', 0.5));
       };
       video.onerror = () => resolve(null);
     });
@@ -525,7 +526,10 @@ export function IdeaPromptModule({
              if (vData.candidates?.[0]?.content?.parts?.[0]?.file_data?.file_uri) {
                videoUrl = vData.candidates[0].content.parts[0].file_data.file_uri;
              } else if (vData.candidates?.[0]?.content?.parts?.[0]?.inline_data?.data) {
-               videoUrl = "data:video/mp4;base64," + vData.candidates[0].content.parts[0].inline_data.data;
+               // Fix Quota Exceeded by creating a Blob URL instead of storing raw base64 string
+               const videoData = vData.candidates[0].content.parts[0].inline_data.data;
+               const videoBlob = new Blob([Uint8Array.from(atob(videoData), c => c.charCodeAt(0))], { type: 'video/mp4' });
+               videoUrl = URL.createObjectURL(videoBlob);
              }
              
              if (videoUrl) {
