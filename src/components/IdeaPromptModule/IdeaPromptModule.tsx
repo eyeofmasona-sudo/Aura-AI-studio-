@@ -56,8 +56,8 @@ export function IdeaPromptModule({
     aiSuggestions: [],
     validationErrors: {},
     magicLanguage: "Русский",
-    magicDuration: 4, // in scenes
-    magicClipDuration: "8", // 8 seconds per clip
+    magicDuration: 30, // in seconds (Total duration)
+    magicClipDuration: "5", // 5 seconds per clip default
     magicGenerateCharacters: true,
     isMagicRunning: false,
     magicProgress: 0,
@@ -437,8 +437,11 @@ export function IdeaPromptModule({
         } catch(e) { console.warn("Failed to parse characters"); }
       }
 
+      // Calculate number of scenes based on Total Duration and Clip Duration
+      const sceneCount = Math.max(1, Math.ceil(state.magicDuration / Number(state.magicClipDuration)));
+
       // 2. Scenario
-      setState(s => ({ ...s, magicProgress: 35, magicStatusText: "Написание сценария..." }));
+      setState(s => ({ ...s, magicProgress: 35, magicStatusText: `Написание сценария (Сцен: ${sceneCount})...` }));
       const sceneRes = await fetch('/api/gemini/action', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -446,7 +449,7 @@ export function IdeaPromptModule({
           inputs: [
             `Идея: ${context}`,
             characterContext,
-            `Создай ровно ${state.magicDuration} сцен.`,
+            `Создай ровно ${sceneCount} сцен. Каждая сцена длится ${state.magicClipDuration} секунд. Общая длительность фильма: ${state.magicDuration} секунд.`,
             languageInstruction,
             `Верни ТОЛЬКО валидный JSON массив объектов. Формат: [{"id": "1", "title": "название", "description": "описание", "location": "локация", "characters": ["имя"], "videoPrompt": "English cinematic prompt for Veo", "duration": "${state.magicClipDuration} сек", "cameraMovement": "static"}]`
           ],
@@ -641,16 +644,16 @@ export function IdeaPromptModule({
                  </div>
                  
                  <div className="flex flex-col gap-1.5">
-                   <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Объём (в сценах)</span>
+                   <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Длительность фильма</span>
                    <select 
                      value={state.magicDuration} 
                      onChange={e => setState(s => ({ ...s, magicDuration: Number(e.target.value) }))}
                      className="bg-black/60 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-[#B026FF]/50"
                    >
-                     <option value={2}>2 Сцены</option>
-                     <option value={4}>4 Сцены</option>
-                     <option value={6}>6 Сцен</option>
-                     <option value={8}>8 Сцен</option>
+                     <option value={15}>15 Секунд</option>
+                     <option value={30}>30 Секунд</option>
+                     <option value={60}>1 Минута</option>
+                     <option value={120}>2 Минуты</option>
                    </select>
                  </div>
 
