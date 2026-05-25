@@ -14,7 +14,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   try {
     const { actionName, inputs, specTitle, modelName, systemInstruction: customInstruction } = req.body;
-    const targetModel = modelName || process.env.GOOGLE_AI_DEFAULT_MODEL || 'gemini-2.5-flash';
+    const targetModel = modelName || process.env.GOOGLE_AI_DEFAULT_MODEL || 'gemini-3.5-flash';
 
     if (targetModel.includes('veo') || targetModel.includes('lyria') || targetModel.includes('imagen')) {
       return res.status(400).json({ error: `Model ${targetModel} not supported here. Use dedicated endpoints.` });

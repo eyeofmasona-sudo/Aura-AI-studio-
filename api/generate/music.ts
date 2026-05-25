@@ -11,8 +11,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!prompt) return res.status(400).json({ error: 'prompt is required' });
 
     const ai = new GoogleGenAI({ apiKey });
+    const musicModel = process.env.GOOGLE_AI_MUSIC_MODEL || 'lyria-3-pro-preview';
     const response = await ai.models.generateContent({
-      model: 'lyria-3-pro-preview',
+      model: musicModel,
       contents: [{ role: 'user', parts: [{ text: prompt }] }],
       config: { responseModalities: ['AUDIO'] } as any,
     });

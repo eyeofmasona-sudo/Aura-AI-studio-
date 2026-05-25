@@ -42,7 +42,7 @@ async function startServer() {
   app.post("/api/gemini/action", async (req, res) => {
     try {
       const { actionName, inputs, specTitle, modelName, systemInstruction: customInstruction } = req.body;
-      const targetModel = modelName || process.env.GOOGLE_AI_DEFAULT_MODEL || "gemini-2.5-flash";
+      const targetModel = modelName || process.env.GOOGLE_AI_DEFAULT_MODEL || "gemini-3.5-flash";
       
       let systemInstruction = customInstruction || `You are a creative assistant inside an AI Video Studio.
 The user is currently on the module step: "${specTitle}".
@@ -149,8 +149,9 @@ CRITICAL RULES:
       const { prompt, firstFrameBase64, firstFrameMime = "image/jpeg", durationSeconds = 5, numberOfVideos = 1 } = req.body;
       if (!prompt) return res.status(400).json({ error: "prompt is required" });
 
+      const videoModel = process.env.GOOGLE_AI_VIDEO_MODEL || "veo-3.1-lite-generate-preview";
       const params: any = {
-        model: "veo-3.1-lite-generate-preview",
+        model: videoModel,
         prompt,
         config: { numberOfVideos, durationSeconds },
       };
@@ -191,8 +192,9 @@ CRITICAL RULES:
       const { prompt, numberOfImages = 1, aspectRatio = "16:9" } = req.body;
       if (!prompt) return res.status(400).json({ error: "prompt is required" });
 
+      const imageModel = process.env.GOOGLE_AI_IMAGE_MODEL || "gemini-2.5-flash-image";
       const response = await ai.models.generateImages({
-        model: "imagen-3.0-generate-002",
+        model: imageModel,
         prompt,
         config: { numberOfImages, aspectRatio, outputMimeType: "image/jpeg" },
       });
@@ -218,8 +220,9 @@ CRITICAL RULES:
       const { text, voiceName = "Kore", speakingRate = 1.0 } = req.body;
       if (!text) return res.status(400).json({ error: "text is required" });
 
+      const ttsModel = process.env.GOOGLE_AI_TTS_MODEL || "gemini-3.1-flash-tts-preview";
       const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
+        model: ttsModel,
         contents: [{ role: "user", parts: [{ text }] }],
         config: {
           responseModalities: ["AUDIO"],
@@ -250,8 +253,9 @@ CRITICAL RULES:
       const { prompt, durationSeconds = 30 } = req.body;
       if (!prompt) return res.status(400).json({ error: "prompt is required" });
 
+      const musicModel = process.env.GOOGLE_AI_MUSIC_MODEL || "lyria-3-pro-preview";
       const response = await ai.models.generateContent({
-        model: "lyria-3-pro-preview",
+        model: musicModel,
         contents: [{ role: "user", parts: [{ text: prompt }] }],
         config: { responseModalities: ["AUDIO"] } as any,
       });
@@ -273,10 +277,10 @@ CRITICAL RULES:
   // ─────────────────────────────────────────────────────────────────────────
   app.get("/api/capabilities", (_req, res) => {
     res.json({
-      video: { model: "veo-3.1-lite-generate-preview", enabled: !!effectiveApiKey },
-      image: { model: "imagen-3.0-generate-002", enabled: !!effectiveApiKey },
-      tts:   { model: "gemini-2.5-flash-preview-tts", enabled: !!effectiveApiKey },
-      music: { model: "lyria-3-pro-preview", enabled: !!effectiveApiKey },
+      video: { model: process.env.GOOGLE_AI_VIDEO_MODEL || "veo-3.1-lite-generate-preview", enabled: !!effectiveApiKey },
+      image: { model: process.env.GOOGLE_AI_IMAGE_MODEL || "gemini-2.5-flash-image", enabled: !!effectiveApiKey },
+      tts:   { model: process.env.GOOGLE_AI_TTS_MODEL || "gemini-3.1-flash-tts-preview", enabled: !!effectiveApiKey },
+      music: { model: process.env.GOOGLE_AI_MUSIC_MODEL || "lyria-3-pro-preview", enabled: !!effectiveApiKey },
     });
   });
 
