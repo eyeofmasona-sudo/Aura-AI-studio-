@@ -19,8 +19,8 @@ async function startServer() {
     console.warn("WARNING: Neither GOOGLE_AI_API_KEY nor GEMINI_API_KEY environment variable is set. API calls will fail.");
   }
 
-  const ai = new GoogleGenAI({ 
-    apiKey: effectiveApiKey || "mock-key",
+  const ai = new GoogleGenAI({
+    apiKey: effectiveApiKey || "",
     httpOptions: {
       headers: {
         'User-Agent': 'aistudio-build',
@@ -152,7 +152,7 @@ CRITICAL RULES:
       const params: any = {
         model: "veo-3.1-lite-generate-preview",
         prompt,
-        config: { numberOfVideos, durationSeconds, generateAudio: false },
+        config: { numberOfVideos, durationSeconds },
       };
       if (firstFrameBase64) {
         params.image = { imageBytes: firstFrameBase64, mimeType: firstFrameMime };

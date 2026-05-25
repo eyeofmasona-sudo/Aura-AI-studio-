@@ -101,130 +101,16 @@ const TRANSITIONS = [
   "analog glitch"
 ];
 
-// Aesthetic mock stock images for First / Last Frame generation
-const MOCK_THEMED_IMAGES = {
-  city: [
-    "https://images.unsplash.com/photo-1511447333015-45b65e60f6d5?w=1200&q=80", // cyberpunk pink/blue
-    "https://images.unsplash.com/photo-1519501025264-65ba15a82390?w=1200&q=80"  // city night lights
-  ],
-  bar: [
-    "https://images.unsplash.com/photo-1543007630-9710e4a00a20?w=1200&q=80", // dark atmospheric bar
-    "https://images.unsplash.com/photo-1514933651103-005eec06c04b?w=1200&q=80"  // retro warm pub
-  ],
-  sky: [
-    "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=1200&q=80", // sci-fi skies
-    "https://images.unsplash.com/photo-1518770660439-4636190af475?w=1200&q=80"  // high tech motherboard neon
-  ],
-  nature: [
-    "https://images.unsplash.com/photo-1507842217343-583bb7270b66?w=1200&q=80", // dark foggy forest
-    "https://images.unsplash.com/photo-1518837695005-2083093ee35b?w=1200&q=80"  // foggy sea morning
-  ],
-  default: [
-    "https://images.unsplash.com/photo-1579783902614-a3fb3927b6a5?w=1200&q=80", // neon abstract
-    "https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=1200&q=80"  // cinematic camera
-  ]
-};
-
-// Realistic mock video gifs/loops for simulated output
-const MOCK_VIDEOS = [
-  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3o3ejRrbHNjYzA4YjBtZnNoc2t4N2J6M2VibW1wNTc4OXpycWp2aiZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l0EwZ924gDcGHZas8/giphy.gif",
-  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExM3dqNXoxbnM3MXk4cGRlNG9hcWJ0c2R2ZXhyMnc0cmVtb3F0YTA5NCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/3o7qDYXe0GQ5HV1AZy/giphy.gif",
-  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExOW82Mm9mdXNzOG11bzRxNnpndXoxbHk4ZmoxZmZnb2Fqampoc3I0NCZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/A06UFEx8jxEwU/giphy.gif",
-  "https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjExbDVqNzU1dmt6ZGEyNWpzdHBwcTA2ajl6OHptZzM3b3g3OHVtbTNrbyZlcD12MV9pbnRlcm5hbF9naWZfYnlfaWQmY3Q9Zw/l378gK0R3e4u9uX3a/giphy.gif"
-];
 
 export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
-  // Try loading saved state or initialize with incredible cinematic scenes
   const [state, setState] = useState<VideoGeneratorState>(() => {
     return {
-      sceneVideoBlocks: [
-        {
-          id: "block-1",
-          chapterId: "chap-1",
-          chapterTitle: "Глава 1. Город неонового дождя",
-          sceneId: "sc-1",
-          sceneNumber: 1,
-          sceneTitle: "Пробуждение в переулке",
-          sceneDescription: "Главный герой приходит в себя на влажном асфальте. Течет дождь, свет вывесок мерцает.",
-          characters: ["Кей (Протагонист)"],
-          location: "Сектор 7, Темный Переулок",
-          mood: "Дождливый киберпанк, одиночество, таинственность",
-          visualStyleHint: "Высокий контраст, холодный синий неон с горячими розовыми бликами",
-          continuityNotes: "Кей одет в порванный черный плащ. На правом плече светящийся имплант.",
-          firstFrameImage: "https://images.unsplash.com/photo-1511447333015-45b65e60f6d5?w=500&q=80",
-          lastFrameImage: null,
-          scenePrompt: "Кей медленно поднимается с колен, дождевые капли стекают по лицу, неоновые отсветы отражаются на мокром асфальте переулка.",
-          motionPrompt: "Камера плавно отъезжает назад, фокусируясь на глазах героя. Медленное движение капель воды.",
-          negativePrompt: "яркое дневное солнце, веселая атмосфера, чистый сухой асфальт",
-          cameraMovement: "slow push-in",
-          duration: "5 сек",
-          transitionToNextScene: "match cut",
-          generationStatus: "idle",
-          generatedVideos: [],
-          selectedVideoId: null,
-          validationErrors: {}
-        },
-        {
-          id: "block-2",
-          chapterId: "chap-1",
-          chapterTitle: "Глава 1. Город неонового дождя",
-          sceneId: "sc-2",
-          sceneNumber: 2,
-          sceneTitle: "Встреча в Синт-Баре",
-          sceneDescription: "Кей заходит в подвальный бар «Антигравити». Внутри тусклый багровый свет, играет гудящий электро-синт.",
-          characters: ["Кей (Протагонист)", "Информатор Лира"],
-          location: "Синт-Бар «Антигравити»",
-          mood: "Напряженный нуар, заговор, скрытый страх",
-          visualStyleHint: "Приглушенный красный и золотой свет, клубы сигаретного дыма в лучах прожекторов",
-          continuityNotes: "Лира сидит в угловой ложе, держит в руках светящийся микрочип.",
-          firstFrameImage: null,
-          lastFrameImage: null,
-          scenePrompt: "",
-          motionPrompt: "",
-          negativePrompt: "громкий смех, солнечный свет, пустой зал",
-          cameraMovement: "orbit",
-          duration: "8 сек",
-          transitionToNextScene: "fade to black",
-          generationStatus: "idle",
-          generatedVideos: [],
-          selectedVideoId: null,
-          validationErrors: {}
-        },
-        {
-          id: "block-3",
-          chapterId: "chap-2",
-          chapterTitle: "Глава 2. Линия побега",
-          sceneId: "sc-3",
-          sceneNumber: 3,
-          sceneTitle: "Погоня на Флаерах",
-          sceneDescription: "Полиция преследует Кей и Лиру сквозь облачные мега-структуры города.",
-          characters: ["Кей (Протагонист)", "Лира", "Дроны преследователей"],
-          location: "Воздушные эстакады над Облаками",
-          mood: "Сумасшедший адреналин, скорость, технологическая схватка",
-          visualStyleHint: "Размытие в движении, яркие трассирующие очереди, массивные вентиляторы мегаструктур",
-          continuityNotes: "Флаер Героев оставляет синий ионный след.",
-          firstFrameImage: null,
-          lastFrameImage: null,
-          scenePrompt: "",
-          motionPrompt: "",
-          negativePrompt: "неторопливые кадры, спокойное небо, статика",
-          cameraMovement: "tracking shot",
-          duration: "10 сек",
-          transitionToNextScene: "cross dissolve",
-          generationStatus: "idle",
-          generatedVideos: [],
-          selectedVideoId: null,
-          validationErrors: {}
-        }
-      ],
-      selectedBlockId: "block-1",
+      sceneVideoBlocks: [],
+      selectedBlockId: null,
       timelineClips: [],
-      aiSuggestions: [
-        { id: "sug-1", title: "Рекомендация по Движению", text: "Для Сцены 1 (Пробуждение) лучше всего использовать медленный наезд (Slow Push-In) — это подчеркнет драматическое раскрытие характера и создаст ощущение глубины.", type: "camera" },
-        { id: "sug-2", title: "Стилистика Текста", text: "Задействуйте слова 'ion trails', 'volumetric fog' и 'rain dispersion effect' в промпте движения, чтобы современные ИИ-модели правильно выстроили динамику частиц.", type: "motion" }
-      ],
+      aiSuggestions: [],
       isGenerating: false,
-      consistencyNotes: "— Система проверила переходы: Сцена 1 плавно стыкуется со Сценой 2 благодаря совпадающим оттенкам неонового спектра.",
+      consistencyNotes: "",
       searchFilter: ""
     };
   });
@@ -336,45 +222,48 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
 
   // Handler: importScenesFromFrameGenerator
   const importScenesFromFrameGenerator = () => {
-    // If the FrameGenerator saved any anchors in localStorage, pull them in. Otherwise pull beautiful preset anchors!
-    setState(s => {
-      const updated = s.sceneVideoBlocks.map(b => {
-        // If first or last frames are empty, we inject beautiful anchor presets matching their atmosphere
-        let fimg = b.firstFrameImage;
-        let limg = b.lastFrameImage;
-        
-        if (!fimg) {
-          if (b.location.toLowerCase().includes("бар")) {
-            fimg = MOCK_THEMED_IMAGES.bar[0];
-          } else if (b.location.toLowerCase().includes("воздушн") || b.location.toLowerCase().includes("облак")) {
-            fimg = MOCK_THEMED_IMAGES.sky[0];
-          } else {
-            fimg = MOCK_THEMED_IMAGES.city[0];
-          }
-        }
-        if (!limg) {
-          if (b.location.toLowerCase().includes("бар")) {
-            limg = MOCK_THEMED_IMAGES.bar[1];
-          } else if (b.location.toLowerCase().includes("воздушн") || b.location.toLowerCase().includes("облак")) {
-            limg = MOCK_THEMED_IMAGES.sky[1];
-          } else {
-            limg = MOCK_THEMED_IMAGES.city[1];
-          }
-        }
+    // Check localStorage for any saved frame anchors
+    const savedFrames = localStorage.getItem('frame_generator_anchors');
+    if (savedFrames) {
+      try {
+        const anchors = JSON.parse(savedFrames);
+        setState(s => {
+          const updated = s.sceneVideoBlocks.map(b => ({
+            ...b,
+            firstFrameImage: anchors[b.id]?.firstFrame || b.firstFrameImage,
+            lastFrameImage: anchors[b.id]?.lastFrame || b.lastFrameImage
+          }));
+          saveToLocalStorage(updated, s.timelineClips);
+          return { ...s, sceneVideoBlocks: updated };
+        });
+        alert("Импортированы якорные кадры из «Генератора Кадров»!");
+      } catch (e) {
+        alert("Не удалось загрузить якорные кадры.");
+      }
+    } else {
+      alert("Нет сохраненных якорных кадров в «Генераторе Кадров».");
+    }
+  };
 
-        return {
-          ...b,
-          firstFrameImage: fimg,
-          lastFrameImage: limg
-        };
-      });
-      saveToLocalStorage(updated, s.timelineClips);
-      return {
-        ...s,
-        sceneVideoBlocks: updated
-      };
-    });
-    alert("Импортированы якорные кадры из «Генератора Кадров»! Стыковочные слоты Первого и Последнего кадра заполнены.");
+  // Handler: importVoiceDataFromVoiceModule
+  const importVoiceDataFromVoiceModule = () => {
+    try {
+      const voiceStateJson = localStorage.getItem("aura_voice_module_state");
+      if (!voiceStateJson) {
+        alert("Нет данных голоса. Сначала сгенерируйте голос в модуле «Голос / TTS».");
+        return;
+      }
+      const voiceData = JSON.parse(voiceStateJson);
+      if (!voiceData.generatedVoiceAudios || voiceData.generatedVoiceAudios.length === 0) {
+        alert("Нет сгенерированных аудиодорожек. Сначала запустите генерацию голоса в модуле «Голос».");
+        return;
+      }
+      // Store voice data for use in scenes
+      localStorage.setItem("video_generator_imported_voice", JSON.stringify(voiceData));
+      alert(`Успешно импортировано ${voiceData.generatedVoiceAudios.length} голосовых дорожек из модуля «Голос»!\n\nТеперь вы можете использовать эти аудиодорожки в редактор видео.`);
+    } catch (err) {
+      alert("Ошибка при импорте голоса: " + (err instanceof Error ? err.message : "Неизвестная ошибка"));
+    }
   };
 
   // Handler: createSceneVideoBlocksFromScenes
@@ -463,51 +352,15 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
     updateBlock(blockId, { lastFrameImage: url });
   };
 
-  // Helper for mock image generation
-  const pickRandomUnsplash = (location: string): string => {
-    const locLower = location.toLowerCase();
-    let pool = MOCK_THEMED_IMAGES.default;
-    if (locLower.includes("переулок") || locLower.includes("город") || locLower.includes("улиц")) {
-      pool = MOCK_THEMED_IMAGES.city;
-    } else if (locLower.includes("бар") || locLower.includes("ресторан")) {
-      pool = MOCK_THEMED_IMAGES.bar;
-    } else if (locLower.includes("воздух") || locLower.includes("эстакад") || locLower.includes("неб")) {
-      pool = MOCK_THEMED_IMAGES.sky;
-    } else if (locLower.includes("котлован") || locLower.includes("лес")) {
-      pool = MOCK_THEMED_IMAGES.nature;
-    }
-    const idx = Math.floor(Math.random() * pool.length);
-    return pool[idx];
-  };
 
-  // Handler: generateFirstFrameImage
+  // Handler: generateFirstFrameImage - disabled (use upload instead)
   const generateFirstFrameImage = (blockId: string) => {
-    const block = state.sceneVideoBlocks.find(b => b.id === blockId);
-    if (!block) return;
-    
-    updateBlock(blockId, { generationStatus: "generating" });
-    setTimeout(() => {
-      const generatedUrl = pickRandomUnsplash(block.location);
-      updateBlock(blockId, { 
-        firstFrameImage: generatedUrl,
-        generationStatus: "idle"
-      });
-    }, 1200);
+    alert("Используйте загрузку изображения вместо генерации.");
   };
 
-  // Handler: generateLastFrameImage
+  // Handler: generateLastFrameImage - disabled (use upload instead)
   const generateLastFrameImage = (blockId: string) => {
-    const block = state.sceneVideoBlocks.find(b => b.id === blockId);
-    if (!block) return;
-    
-    updateBlock(blockId, { generationStatus: "generating" });
-    setTimeout(() => {
-      const generatedUrl = pickRandomUnsplash(block.location);
-      updateBlock(blockId, { 
-        lastFrameImage: generatedUrl,
-        generationStatus: "idle"
-      });
-    }, 1200);
+    alert("Используйте загрузку изображения вместо генерации.");
   };
 
   // Handler: updateScenePrompt
@@ -871,17 +724,23 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
         {/* ИСТОЧНИКИ / ИМПОРТ */}
         <div className="flex flex-col sm:flex-row gap-4 bg-black/40 border border-slate-800 rounded-xl p-4 shrink-0">
           <span className="text-[10px] hidden sm:flex font-bold text-slate-500 uppercase tracking-widest items-center pb-0.5">Импорт данных:</span>
-          <button 
-            onClick={importScenesFromScenario} 
+          <button
+            onClick={importScenesFromScenario}
             className="flex-1 py-2.5 min-h-[44px] bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-slate-300 transition-colors flex items-center justify-center gap-2"
           >
             <RefreshCcw className="w-4 h-4 text-[#00F0FF]" /> Из Сценария
           </button>
-          <button 
-            onClick={importScenesFromFrameGenerator} 
+          <button
+            onClick={importScenesFromFrameGenerator}
             className="flex-1 py-2.5 min-h-[44px] bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-slate-300 transition-colors flex items-center justify-center gap-2"
           >
             <ImageIcon className="w-4 h-4 text-[#b026ff]" /> Из Кадрогенератора
+          </button>
+          <button
+            onClick={importVoiceDataFromVoiceModule}
+            className="flex-1 py-2.5 min-h-[44px] bg-slate-900 hover:bg-slate-800 border border-slate-700 rounded-lg text-xs font-bold text-slate-300 transition-colors flex items-center justify-center gap-2"
+          >
+            <Mic className="w-4 h-4 text-rose-400" /> Из Голоса
           </button>
         </div>
 
