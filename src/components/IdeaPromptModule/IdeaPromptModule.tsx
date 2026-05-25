@@ -24,6 +24,7 @@ interface IdeaState {
   validationErrors: Record<string, string>;
   magicLanguage: string;
   magicDuration: number;
+  magicClipDuration: string;
   magicGenerateCharacters: boolean;
   isMagicRunning: boolean;
   magicProgress: number;
@@ -55,7 +56,8 @@ export function IdeaPromptModule({
     aiSuggestions: [],
     validationErrors: {},
     magicLanguage: "Русский",
-    magicDuration: 4, // in 8-second blocks. 4 = 32s
+    magicDuration: 4, // in scenes
+    magicClipDuration: "8", // 8 seconds per clip
     magicGenerateCharacters: true,
     isMagicRunning: false,
     magicProgress: 0,
@@ -365,6 +367,28 @@ export function IdeaPromptModule({
     alert(`Идея успешно сохранена в проект "${pName}"! Вы найдете сгенерированный Markdown файл (1_Идея_и_Солид.md) в левом сайдбаре проекта.`);
   };
 
+  // Helper to extract the last frame of a generated video for 100% continuity
+  const extractLastFrame = async (videoUrl: string): Promise<string | null> => {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      video.crossOrigin = "anonymous";
+      video.muted = true;
+      video.src = videoUrl;
+      video.onloadeddata = () => {
+        video.currentTime = Math.max(0, video.duration - 0.1);
+      };
+      video.onseeked = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (ctx) ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.9));
+      };
+      video.onerror = () => resolve(null);
+    });
+  };
+
   // --- MAGIC PIPELINE ---
   const runMagicPipeline = async () => {
     setState(s => ({ ...s, isMagicRunning: true, magicProgress: 5, magicStatusText: "Инициализация конвейера..." }));
@@ -424,7 +448,7 @@ export function IdeaPromptModule({
             characterContext,
             `Создай ровно ${state.magicDuration} сцен.`,
             languageInstruction,
-            `Верни ТОЛЬКО валидный JSON массив объектов. Формат: [{"id": "1", "title": "название", "description": "описание", "location": "локация", "characters": ["имя"], "videoPrompt": "English cinematic prompt for Veo", "duration": "8 сек", "cameraMovement": "static"}]`
+            `Верни ТОЛЬКО валидный JSON массив объектов. Формат: [{"id": "1", "title": "название", "description": "описание", "location": "локация", "characters": ["имя"], "videoPrompt": "English cinematic prompt for Veo", "duration": "${state.magicClipDuration} сек", "cameraMovement": "static"}]`
           ],
           specTitle: "Магия"
         })
@@ -459,7 +483,7 @@ export function IdeaPromptModule({
         motionPrompt: "",
         negativePrompt: "",
         cameraMovement: sc.cameraMovement || "static",
-        duration: "8 сек",
+        duration: `${state.magicClipDuration} сек`,
         transitionToNextScene: "cut",
         generationStatus: "idle",
         generatedVideos: [],
@@ -470,18 +494,25 @@ export function IdeaPromptModule({
       // 3. Videos
       let timelineClips: any[] = [];
       const totalScenes = videoBlocks.length;
+      let previousLastFrame: string | null = null;
       
       for (let i = 0; i < totalScenes; i++) {
         setState(s => ({ ...s, magicProgress: 40 + (i / totalScenes) * 50, magicStatusText: `Генерация видео ${i + 1} из ${totalScenes}...` }));
         const block = videoBlocks[i];
         
+        // Pass the first frame from the previous video for 100% continuity
+        if (previousLastFrame) {
+          block.firstFrameImage = previousLastFrame;
+        }
+
         try {
           const vRes = await fetch('/api/gemini/video', {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               prompt: block.scenePrompt,
-              duration: '8 seconds',
-              cameraMovement: block.cameraMovement
+              duration: `${state.magicClipDuration} seconds`,
+              cameraMovement: block.cameraMovement,
+              firstFrameImage: previousLastFrame // FOR CONTINUITY
             })
           });
           
@@ -500,12 +531,16 @@ export function IdeaPromptModule({
                 block.generatedVideos = [{ id: vidId, url: videoUrl, previewUrl: videoUrl, timestamp: new Date().toLocaleTimeString(), motionType: block.cameraMovement }];
                 block.selectedVideoId = vidId;
                 
+                // Extract last frame for continuity of the NEXT block
+                previousLastFrame = await extractLastFrame(videoUrl);
+                block.lastFrameImage = previousLastFrame;
+                
                 timelineClips.push({
                   id: `clip-magic-${block.id}`,
                   sceneId: block.sceneId,
                   sceneTitle: block.sceneTitle,
                   videoUrl: videoUrl,
-                  duration: "8 сек",
+                  duration: `${state.magicClipDuration} сек`,
                   transition: "cut",
                   promptMatched: block.scenePrompt
                 });
@@ -591,7 +626,7 @@ export function IdeaPromptModule({
                  Опишите идею ниже, настройте эти параметры и нажмите кнопку. Система сама сгенерирует персонажей, сценарий и видео-ряд!
                </p>
                
-               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+               <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                  <div className="flex flex-col gap-1.5">
                    <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Язык контента</span>
                    <select 
@@ -606,16 +641,29 @@ export function IdeaPromptModule({
                  </div>
                  
                  <div className="flex flex-col gap-1.5">
-                   <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Длительность (в сценах)</span>
+                   <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Объём (в сценах)</span>
                    <select 
                      value={state.magicDuration} 
                      onChange={e => setState(s => ({ ...s, magicDuration: Number(e.target.value) }))}
                      className="bg-black/60 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-[#B026FF]/50"
                    >
-                     <option value={2}>2 Сцены (16 сек)</option>
-                     <option value={4}>4 Сцены (32 сек)</option>
-                     <option value={6}>6 Сцен (48 сек)</option>
-                     <option value={8}>8 Сцен (64 сек)</option>
+                     <option value={2}>2 Сцены</option>
+                     <option value={4}>4 Сцены</option>
+                     <option value={6}>6 Сцен</option>
+                     <option value={8}>8 Сцен</option>
+                   </select>
+                 </div>
+
+                 <div className="flex flex-col gap-1.5">
+                   <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Длина кадра (Сек.)</span>
+                   <select 
+                     value={state.magicClipDuration} 
+                     onChange={e => setState(s => ({ ...s, magicClipDuration: e.target.value }))}
+                     className="bg-black/60 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-[#B026FF]/50"
+                   >
+                     <option value="3">3 Секунды</option>
+                     <option value="5">5 Секунд</option>
+                     <option value="8">8 Секунд</option>
                    </select>
                  </div>
                  
