@@ -59,8 +59,6 @@ export interface AudioEditorModuleState {
   uploadedAudioFiles: ImportedAudioItem[];
   audioTracks: AudioClip[];
   selectedClipId: string | null;
-  noiseReductionEnabled: boolean;
-  normalizationEnabled: boolean;
   eqNotes: string;
   compressionNotes: string;
   deEsserNotes: string;
@@ -106,8 +104,6 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
       uploadedAudioFiles: [],
       audioTracks: [],
       selectedClipId: null,
-      noiseReductionEnabled: false,
-      normalizationEnabled: false,
       eqNotes: "High-pass on voices at 80Hz.",
       compressionNotes: "",
       deEsserNotes: "",
@@ -337,49 +333,7 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
     } catch (err: any) { updateState({ isProcessing: false }); alert(`Ошибка: ${err.message}`); }
   };
 
-  // 6. Processing — флаги (реальная DSP обработка на клиенте невозможна без WebAudio pipeline)
-  const processNoiseReductionIfSupported = () => {
-    updateState({ isProcessing: true });
-    setTimeout(() => updateState({ isProcessing: false, noiseReductionEnabled: true }), 800);
-  };
-
-  const normalizeVolumeIfSupported = () => {
-    updateState({ isProcessing: true });
-    setTimeout(() => updateState({ isProcessing: false, normalizationEnabled: true }), 800);
-  };
-
-  const buildFinalAudioMixIfSupported = async () => {
-    // Collect the primary audio URL from imported tracks
-    const allSrcs = [...state.importedMusic, ...state.importedVoiceAudios, ...state.uploadedAudioFiles];
-    const primary = allSrcs[0];
-
-    updateState({ isProcessing: true });
-
-    // Small delay to show loading state
-    await new Promise(r => setTimeout(r, 600));
-
-    const finalAudio: FinalMixItem = {
-      id: `fin-${Date.now()}`,
-      title: `Final_Mix_${new Date().toISOString().slice(0,10)}.wav`,
-      url: primary?.url ?? "",
-      createdAt: new Date().toLocaleTimeString(),
-      duration: primary?.duration ?? "—"
-    };
-
-    updateState({ isProcessing: false, finalAudioMix: finalAudio });
-    setActiveTab('mix');
-
-    // Save to localStorage for bridge
-    const saveData = {
-      finalAudioMix: finalAudio,
-      audioTracks: state.audioTracks,
-      loudnessTarget: state.loudnessTarget,
-      selectedPlatformTarget: state.selectedPlatformTarget,
-    };
-    localStorage.setItem('aura_audio_editor_final', JSON.stringify(saveData));
-  };
-
-  // 7. AI кнопки — реальный Gemini
+  // 6. AI кнопки — реальный Gemini
   const analyzeAudioIfSupported = async () => {
     updateState({ isProcessing: true });
     try {
@@ -703,30 +657,6 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
                  <div className="bg-black/30 border border-slate-800 rounded-xl p-5 grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div className="flex flex-col gap-6 border-r border-slate-800/0 md:border-slate-800 pr-0 md:pr-4">
                       
-                      <div>
-                        <span className="text-xs uppercase font-extrabold tracking-widest text-indigo-400 border-l-2 border-indigo-500 pl-2 mb-4 block">Очистка (Restoration)</span>
-                        <div className="flex flex-col gap-3">
-                          <label className="flex items-center gap-3 cursor-pointer p-3 border border-slate-800 rounded-lg bg-black/40">
-                            <input type="checkbox" checked={state.noiseReductionEnabled} onChange={e => updateState({ noiseReductionEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500 rounded" />
-                            <div className="flex flex-col">
-                              <span className="text-xs font-bold text-slate-200">Noise Reduction (De-noise)</span>
-                              <span className="text-[10px] text-slate-500">Удаляет фоновый шум из записей голоса.</span>
-                            </div>
-                          </label>
-                          <label className="flex items-center gap-3 cursor-pointer p-3 border border-slate-800 rounded-lg bg-black/40">
-                            <input type="checkbox" checked={state.normalizationEnabled} onChange={e => updateState({ normalizationEnabled: e.target.checked })} className="w-4 h-4 accent-indigo-500 rounded" />
-                            <div className="flex flex-col">
-                              <span className="text-xs font-bold text-slate-200">Loudness Normalization</span>
-                              <span className="text-[10px] text-slate-500">Приводит все клипы к единому уровню.</span>
-                            </div>
-                          </label>
-                        </div>
-                        <div className="mt-3 flex gap-2">
-                           <button onClick={processNoiseReductionIfSupported} className="flex-1 py-2 bg-slate-900 border border-slate-700 text-xs font-bold text-slate-300 rounded hover:text-white transition-colors">Очистить шум (AI)</button>
-                           <button onClick={normalizeVolumeIfSupported} className="flex-1 py-2 bg-slate-900 border border-slate-700 text-xs font-bold text-slate-300 rounded hover:text-white transition-colors">Нормализовать</button>
-                        </div>
-                      </div>
-
                     </div>
                     
                     <div className="flex flex-col gap-4">
@@ -887,21 +817,6 @@ export function AudioEditorModule({ onApprove }: AudioEditorModuleProps) {
                    </div>
                  </div>
 
-                 <div className="bg-gradient-to-r from-blue-900/20 to-indigo-900/20 border border-indigo-500/50 rounded-xl p-6 flex flex-col md:flex-row items-center justify-between gap-6 shadow-[0_0_30px_rgba(99,102,241,0.1)]">
-                   <div className="flex flex-col flex-1">
-                      <h3 className="text-lg font-black text-white">Финальный Рендеринг (Bounce)</h3>
-                      <p className="text-xs text-slate-400 mt-1">Компиляция всех треков, очистка, применение эффектов и лимитирование под выбранный стандарт {state.loudnessTarget}.</p>
-                   </div>
-                   
-                   <button 
-                      onClick={buildFinalAudioMixIfSupported}
-                      disabled={state.isProcessing}
-                      className="px-8 py-3 bg-indigo-600 hover:bg-indigo-500 text-white font-extrabold text-sm uppercase tracking-wider rounded-xl transition-all disabled:opacity-50 flex items-center gap-2"
-                   >
-                     {state.isProcessing ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Activity className="w-5 h-5" />}
-                     Собрать Финальный Микс
-                   </button>
-                 </div>
 
                  {state.finalAudioMix && (
                    <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-emerald-950/30 border border-emerald-500/30 rounded-xl p-5 flex items-center justify-between gap-4">
