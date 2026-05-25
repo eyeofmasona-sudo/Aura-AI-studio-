@@ -71,7 +71,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       ],
       config: {
         temperature: 1,
-        responseModalities: ['audio'],
+        responseModalities: ['AUDIO'],
         speechConfig: {
           voiceConfig: {
             prebuiltVoiceConfig: {
@@ -86,12 +86,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let mimeType = 'audio/L16;rate=24000';
 
     for await (const chunk of stream as any) {
-      const part = chunk?.candidates?.[0]?.content?.parts?.[0] ?? chunk?.parts?.[0];
-      const inlineData = part?.inlineData ?? part?.inline_data;
-      if (!inlineData?.data) continue;
-
-      audioChunks.push(Buffer.from(inlineData.data, 'base64'));
-      mimeType = inlineData.mimeType ?? inlineData.mime_type ?? mimeType;
+      const parts = chunk?.candidates?.[0]?.content?.parts ?? chunk?.parts ?? [];
+      for (const part of parts) {
+        const inlineData = part?.inlineData ?? part?.inline_data;
+        if (inlineData?.data) {
+          audioChunks.push(Buffer.from(inlineData.data, 'base64'));
+          mimeType = inlineData.mimeType ?? inlineData.mime_type ?? mimeType;
+        }
+      }
     }
 
     if (audioChunks.length === 0) {
