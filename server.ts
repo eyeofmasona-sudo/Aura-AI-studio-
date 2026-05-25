@@ -7,6 +7,32 @@ import { GLOBAL_SYSTEM_PROMPT } from "./systemPrompt.js";
 
 dotenv.config();
 
+// Gemini TTS returns raw PCM (audio/l16). Browsers need a WAV header to play it.
+function pcmToWavBase64(pcmBase64: string, mimeType: string): string {
+  const rateMatch = /rate=(\d+)/.exec(mimeType);
+  const sampleRate = rateMatch ? parseInt(rateMatch[1], 10) : 24000;
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const pcm = Buffer.from(pcmBase64, "base64");
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const header = Buffer.alloc(44);
+  header.write("RIFF", 0);
+  header.writeUInt32LE(36 + pcm.length, 4);
+  header.write("WAVE", 8);
+  header.write("fmt ", 12);
+  header.writeUInt32LE(16, 16);
+  header.writeUInt16LE(1, 20);
+  header.writeUInt16LE(numChannels, 22);
+  header.writeUInt32LE(sampleRate, 24);
+  header.writeUInt32LE(byteRate, 28);
+  header.writeUInt16LE(blockAlign, 32);
+  header.writeUInt16LE(bitsPerSample, 34);
+  header.write("data", 36);
+  header.writeUInt32LE(pcm.length, 40);
+  return Buffer.concat([header, pcm]).toString("base64");
+}
+
 async function startServer() {
   const app = express();
   const PORT = 3000;
@@ -141,6 +167,62 @@ CRITICAL RULES:
 
 
   // ─────────────────────────────────────────────────────────────────────────
+  // VIDEO GENERATION (UI route) — Veo 3.1 Lite, returns inline base64
+  // ─────────────────────────────────────────────────────────────────────────
+  app.post("/api/gemini/video", async (req, res) => {
+    try {
+      if (!effectiveApiKey) return res.status(500).json({ error: "API key missing" });
+      const { prompt, duration = "5 seconds", cameraMovement = "smooth", firstFrameImage } = req.body;
+      if (!prompt) return res.status(400).json({ error: "Prompt is required" });
+
+      const normalizedDuration = String(duration).replace(/сек/gi, "seconds").replace(/мин/gi, "minutes").trim();
+      const durationMatch = normalizedDuration.match(/(\d+)\s*seconds?/i);
+      // veo-3.1-lite only accepts even durations 4, 6, 8 — snap to nearest valid value
+      const requested = durationMatch ? parseInt(durationMatch[1], 10) : 6;
+      const durationSeconds = [4, 6, 8].reduce((a, b) => (Math.abs(b - requested) < Math.abs(a - requested) ? b : a), 6);
+
+      const videoModel = process.env.GOOGLE_AI_VIDEO_MODEL || "veo-3.1-lite-generate-preview";
+      const params: any = {
+        model: videoModel,
+        prompt: `Generate a cinematic video scene. ${prompt}. Camera movement: ${cameraMovement}.`,
+        config: { durationSeconds, numberOfVideos: 1 },
+      };
+      if (firstFrameImage && typeof firstFrameImage === "string") {
+        const imageBytes = firstFrameImage.startsWith("data:") ? firstFrameImage.split(",")[1] : firstFrameImage;
+        if (!firstFrameImage.startsWith("http")) params.image = { imageBytes, mimeType: "image/jpeg" };
+      }
+
+      let operation = await ai.models.generateVideos(params);
+      const deadline = Date.now() + 4 * 60 * 1000;
+      while (!operation.done) {
+        if (Date.now() > deadline) return res.status(504).json({ error: "Video generation timed out" });
+        await new Promise((r) => setTimeout(r, 5000));
+        operation = await (ai.operations as any).getVideosOperation({ operation });
+      }
+
+      const videos = (operation.response as any)?.generatedVideos ?? [];
+      if (!videos.length) return res.status(500).json({ error: "No videos generated" });
+
+      const video = videos[0];
+      let videoBase64: string | null = video.video?.videoBytes ?? null;
+      const mimeType = video.video?.mimeType || "video/mp4";
+      const uri: string | null = video.video?.uri ?? null;
+
+      if (!videoBase64 && uri) {
+        const dl = await fetch(uri, { headers: { "x-goog-api-key": effectiveApiKey } });
+        if (!dl.ok) return res.status(502).json({ error: `Failed to download video: ${dl.status}` });
+        videoBase64 = Buffer.from(await dl.arrayBuffer()).toString("base64");
+      }
+      if (!videoBase64) return res.status(500).json({ error: "No video content returned" });
+
+      res.json({ candidates: [{ content: { parts: [{ inline_data: { data: videoBase64, mime_type: mimeType } }] } }] });
+    } catch (err: any) {
+      console.error("[/api/gemini/video]", err);
+      res.status(500).json({ error: err.message || "Failed to generate video" });
+    }
+  });
+
+  // ─────────────────────────────────────────────────────────────────────────
   // VIDEO GENERATION — Veo 3.1 Lite
   // ─────────────────────────────────────────────────────────────────────────
   app.post("/api/generate/video", async (req, res) => {
@@ -220,7 +302,7 @@ CRITICAL RULES:
       const { text, voiceName = "Kore", speakingRate = 1.0 } = req.body;
       if (!text) return res.status(400).json({ error: "text is required" });
 
-      const ttsModel = process.env.GOOGLE_AI_TTS_MODEL || "gemini-3.1-flash-tts";
+      const ttsModel = process.env.GOOGLE_AI_TTS_MODEL || "gemini-3.1-flash-tts-preview";
       const response = await ai.models.generateContent({
         model: ttsModel,
         contents: [{ role: "user", parts: [{ text }] }],
@@ -237,7 +319,12 @@ CRITICAL RULES:
       );
       if (!audioPart?.inlineData) return res.status(500).json({ error: "No audio returned from TTS model" });
 
-      res.json({ audioBase64: audioPart.inlineData.data, mimeType: audioPart.inlineData.mimeType });
+      const rawMime: string = audioPart.inlineData.mimeType || "";
+      if (rawMime.includes("l16") || rawMime.includes("pcm")) {
+        res.json({ audioBase64: pcmToWavBase64(audioPart.inlineData.data, rawMime), mimeType: "audio/wav" });
+      } else {
+        res.json({ audioBase64: audioPart.inlineData.data, mimeType: rawMime });
+      }
     } catch (err: any) {
       console.error("[/api/generate/tts]", err);
       res.status(500).json({ error: err.message || "TTS generation failed" });
