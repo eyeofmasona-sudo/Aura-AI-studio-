@@ -11,7 +11,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!prompt) return res.status(400).json({ error: 'prompt is required' });
 
     const ai = new GoogleGenAI({ apiKey });
-    const imageModel = process.env.GOOGLE_AI_IMAGE_MODEL || 'gemini-2.5-flash-image';
+    const imageModel = process.env.GOOGLE_AI_IMAGE_MODEL || 'imagen-4.0-generate-001';
     const response = await ai.models.generateImages({
       model: imageModel,
       prompt,
