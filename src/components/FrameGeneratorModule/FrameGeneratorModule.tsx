@@ -59,6 +59,21 @@ interface GeneratedImage {
   pairRole?: 'first' | 'last';
 }
 
+// Pollinations: keyless image generation, same method as CharacterModule.
+const POLLINATIONS_DIMS: Record<string, { w: number; h: number }> = {
+  '16:9': { w: 1280, h: 720 },
+  '9:16': { w: 720, h: 1280 },
+  '1:1':  { w: 1024, h: 1024 },
+  '4:3':  { w: 1024, h: 768 },
+  '3:4':  { w: 768, h: 1024 },
+};
+
+function buildPollinationsUrl(prompt: string, aspectRatio: string, seed: number): string {
+  const dims = POLLINATIONS_DIMS[aspectRatio] ?? POLLINATIONS_DIMS['16:9'];
+  const cleaned = prompt.trim().replace(/\s+/g, ' ').substring(0, 400);
+  return `https://image.pollinations.ai/p/${encodeURIComponent(cleaned)}?width=${dims.w}&height=${dims.h}&nologo=true&seed=${seed}`;
+}
+
 interface AnchorPair {
   id: string;
   firstFrameId: string;
@@ -597,26 +612,12 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
       const newImages: GeneratedImage[] = [];
 
       for (let i = 0; i < numVars; i++) {
-        const res = await fetch('/api/generate/image', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: fullPrompt, numberOfImages: 1, aspectRatio }),
-        });
-
-        if (!res.ok) {
-          const errData = await res.json().catch(() => ({}));
-          throw new Error(errData.error || `Image API error ${res.status}`);
-        }
-
-        const data = await res.json();
-        const imgData = data.images?.[0];
-        if (!imgData?.imageBase64) throw new Error('No image data returned from API');
-
-        const dataUrl = `data:${imgData.mimeType ?? 'image/jpeg'};base64,${imgData.imageBase64}`;
+        const seed = Math.floor(Math.random() * 999999999);
+        const url = buildPollinationsUrl(fullPrompt, aspectRatio, seed);
 
         newImages.push({
           id: Math.random().toString(36).substr(2, 9),
-          url: dataUrl,
+          url,
           prompt: fullPrompt,
           frameType: type,
           sceneName: getSceneName(),
@@ -683,36 +684,15 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
       // Show assembled prompts in UI
       updateField('imagePrompt', `[PAIR] ${basePrompt}`);
 
-      const [resFirst, resLast] = await Promise.all([
-        fetch('/api/generate/image', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: firstPrompt, numberOfImages: 1, aspectRatio }),
-        }),
-        fetch('/api/generate/image', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ prompt: lastPrompt, numberOfImages: 1, aspectRatio }),
-        }),
-      ]);
-
-      if (!resFirst.ok || !resLast.ok) {
-        const errFirst = !resFirst.ok ? await resFirst.json().catch(() => ({})) : {};
-        const errLast  = !resLast.ok  ? await resLast.json().catch(() => ({}))  : {};
-        throw new Error(errFirst.error || errLast.error || 'Image generation failed for pair');
-      }
-
-      const [dataFirst, dataLast] = await Promise.all([resFirst.json(), resLast.json()]);
-
-      const toDataUrl = (d: any) => {
-        const img = d.images?.[0];
-        if (!img?.imageBase64) throw new Error('No image data in response');
-        return `data:${img.mimeType ?? 'image/jpeg'};base64,${img.imageBase64}`;
-      };
+      // Pollinations: keyless image generation (same method as CharacterModule).
+      const firstUrl = buildPollinationsUrl(firstPrompt, aspectRatio, Math.floor(Math.random() * 999999999));
+      const lastUrl  = buildPollinationsUrl(lastPrompt,  aspectRatio, Math.floor(Math.random() * 999999999));
 
       const pairId = Math.random().toString(36).substr(2, 9);
 
       const firstPairImg: GeneratedImage = {
         id: Math.random().toString(36).substr(2, 9),
-        url: toDataUrl(dataFirst),
+        url: firstUrl,
         prompt: `[FIRST FRAME] ${basePrompt}`,
         frameType: 'anchor-pair',
         sceneName: getSceneName(),
@@ -722,7 +702,7 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
       };
       const lastPairImg: GeneratedImage = {
         id: Math.random().toString(36).substr(2, 9),
-        url: toDataUrl(dataLast),
+        url: lastUrl,
         prompt: `[LAST FRAME] ${basePrompt}`,
         frameType: 'anchor-pair',
         sceneName: getSceneName(),
