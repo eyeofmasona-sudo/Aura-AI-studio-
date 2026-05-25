@@ -297,7 +297,7 @@ export function IdeaPromptModule({
     });
   };
 
-  const generateDialogue = () => runAiAction('Создать диалог', `Напиши небольшой диалог между главными героями. Настроение диалога: ${state.selectedDialogueMood}. Не пиши ничего кроме самого диалога.`, res => setState(s => ({ ...s, generatedDialogue: res })));
+  const generateDialogue = () => runAiAction('Создать диалог', `Опираясь на описанную идею, синопсис и логлайн, напиши сцену с небольшим диалогом между главными героями этой истории. Настроение диалога: ${state.selectedDialogueMood}. Не пиши ничего кроме самого диалога.`, res => setState(s => ({ ...s, generatedDialogue: res })));
 
   const buildFinalPrompt = () => {
     const parts = [
