@@ -172,52 +172,67 @@ export function VideoGeneratorModule({ onApprove }: VideoGeneratorModuleProps) {
 
   // Handler: importScenesFromScenario
   const importScenesFromScenario = () => {
-    // Dynamically retrieve scenario data if cached, or simulate adding high fidelity script entries
-    const imported: SceneVideoBlock[] = [
-      {
-        id: "block-imp-1",
-        chapterId: "chap-imported",
-        chapterTitle: "Глава 3. Подземный Котлован",
-        sceneId: "sc-imp-1",
-        sceneNumber: 4,
-        sceneTitle: "Спуск в Бак Реактора",
-        sceneDescription: "Герои спускаются в заброшенный сектор питания, где скрываются спящие ИИ-серверы.",
-        characters: ["Кей (Протагонист)", "Лира"],
-        location: "Старый Серверный Керн",
-        mood: "Клаустрофобия, зеленоватая дымка, таинственный шепот вентиляторов",
-        visualStyleHint: "Окисленная медь, блеклый зеленый терминальный шрифт, густой туман",
-        continuityNotes: "У Лиры на спине закреплен сканирующий модуль.",
+    const saved = localStorage.getItem("aura_scenario_state");
+    if (!saved) {
+      alert("Нет данных сценария. Перейдите в Сценарий и сохраните раскадровку.");
+      return;
+    }
+    try {
+      const parsed = JSON.parse(saved);
+      const scs = parsed.scenes || [];
+      if (scs.length === 0) {
+        alert("В сценарии нет сцен.");
+        return;
+      }
+
+      const imported: SceneVideoBlock[] = scs.map((sc: any, index: number) => ({
+        id: `block-imp-${Math.random().toString(36).substr(2, 9)}`,
+        chapterId: sc.chapterId || "chap-imported",
+        chapterTitle: "Импортированная раскадровка",
+        sceneId: sc.id || `sc-imp-${index}`,
+        sceneNumber: index + 1,
+        sceneTitle: sc.title || `Сцена ${index + 1}`,
+        sceneDescription: sc.description || sc.action || "",
+        characters: typeof sc.characters === 'string' ? sc.characters.split(',').map((s: string) => s.trim()) : (Array.isArray(sc.characters) ? sc.characters : []),
+        location: sc.location || "",
+        mood: sc.emotionalBeat || "",
+        visualStyleHint: sc.visualNotes || sc.videoPrompt || "",
+        continuityNotes: sc.audioNotes || "",
         firstFrameImage: null,
         lastFrameImage: null,
-        scenePrompt: "",
+        scenePrompt: sc.videoPrompt || "",
         motionPrompt: "",
-        negativePrompt: "дневной свет, чистый воздух",
-        cameraMovement: "crane up",
-        duration: "5 сек",
-        transitionToNextScene: "zoom blur",
+        negativePrompt: "",
+        cameraMovement: "static",
+        duration: "8 сек",
+        transitionToNextScene: "cut",
         generationStatus: "idle",
         generatedVideos: [],
         selectedVideoId: null,
         validationErrors: {}
-      }
-    ];
+      }));
 
-    setState(s => {
-      const merged = [...s.sceneVideoBlocks];
-      // Avoid duplicates
-      imported.forEach(imp => {
-        if (!merged.some(m => m.sceneId === imp.sceneId)) {
-          merged.push(imp);
-        }
+      setState(s => {
+        // Find existing scene blocks to avoid full override if user wants to add more, 
+        // but here it's usually better to just replace or merge by sceneId.
+        const merged = [...s.sceneVideoBlocks];
+        imported.forEach(imp => {
+          if (!merged.some(m => m.sceneId === imp.sceneId)) {
+            merged.push(imp);
+          }
+        });
+        saveToLocalStorage(merged, s.timelineClips);
+        return {
+          ...s,
+          sceneVideoBlocks: merged,
+          selectedBlockId: merged.length > 0 ? merged[0].id : null
+        };
       });
-      saveToLocalStorage(merged, s.timelineClips);
-      return {
-        ...s,
-        sceneVideoBlocks: merged,
-        selectedBlockId: imported[0]?.id || s.selectedBlockId
-      };
-    });
-    alert("Успешно импортированы сцены из модуля «Сценарий и Главы» (Добавлен Блок 4).");
+      alert(`Успешно импортировано сцен из Сценария: ${imported.length}`);
+    } catch (err) {
+      console.error(err);
+      alert("Ошибка парсинга сценария.");
+    }
   };
 
   // Handler: importScenesFromFrameGenerator

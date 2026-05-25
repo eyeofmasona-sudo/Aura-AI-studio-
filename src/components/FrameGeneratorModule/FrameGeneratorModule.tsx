@@ -365,27 +365,26 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
     }
     try {
       const parsed = JSON.parse(saved);
-      const chs = parsed.chapters || [];
       const scs = parsed.scenes || [];
 
-      if (chs.length === 0) {
-        alert("Импортируемый сценарий пуст. Создайте структуру глав во вкладке «Сценарий».");
+      if (scs.length === 0) {
+        alert("Импортируемый сценарий пуст. Создайте сцены во вкладке «Сценарий».");
         return;
       }
 
-      const mappedChapters: Chapter[] = chs.map((c: any, index: number) => ({
-        id: c.id || Math.random().toString(),
-        chapterNumber: index + 1,
-        title: c.title || `Глава ${index + 1}`,
-        summary: c.summary || "Резюме главы отсутствует",
-        emotionalGoal: c.emotionalGoal || "",
-        visualTone: c.plotFunction || "Драматический",
+      const mappedChapters: Chapter[] = [{
+        id: "chap-default",
+        chapterNumber: 1,
+        title: "Раскадровка",
+        summary: "Импортированные сцены",
+        emotionalGoal: "",
+        visualTone: "Стандартный",
         isImported: true
-      }));
+      }];
 
       const mappedScenes: Scene[] = scs.map((sc: any, index: number) => ({
         id: sc.id || Math.random().toString(),
-        chapterId: sc.chapterId || "",
+        chapterId: "chap-default",
         sceneNumber: index + 1,
         title: sc.title || `Сцена ${index + 1}`,
         description: sc.action || sc.description || "Описание сцены",
@@ -395,7 +394,7 @@ export function FrameGeneratorModule({ onApprove }: FrameGeneratorModuleProps) {
           : (Array.isArray(sc.characters) ? sc.characters : []),
         conflict: sc.conflict || "",
         emotionalBeat: sc.emotionalBeat || "",
-        visualStyleHint: sc.visualNotes || "",
+        visualStyleHint: sc.visualNotes || sc.videoPrompt || "",
         continuityNotes: sc.audioNotes || "",
         isImported: true
       }));
