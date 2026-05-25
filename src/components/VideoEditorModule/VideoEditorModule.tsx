@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   Play, Pause, Upload, Import, CheckSquare, Settings2, Trash2, Scissors, 
-  Layers, Volume2, Mic, Music, Layout, Sliders, Type, Split, Sparkles, AlertCircle, FileText, Anchor, ArrowRight, Save
+  Layers, Volume2, Mic, Music, Layout, Sliders, Type, Split, Sparkles, AlertCircle, FileText, Anchor, ArrowRight, Save, Download, Loader2
 } from 'lucide-react';
 
 interface TimelineClip {
@@ -48,6 +48,8 @@ interface VideoEditorState {
   aiSuggestions: any[];
   validationErrors: Record<string, string>;
   isRendering: boolean;
+  isAiLoading: Record<string, boolean>;
+  playingClipIndex: number;
 }
 
 interface VideoEditorModuleProps {
@@ -77,10 +79,39 @@ export function VideoEditorModule({ onApprove }: VideoEditorModuleProps) {
     previewRender: null,
     aiSuggestions: [],
     validationErrors: {},
-    isRendering: false
+    isRendering: false,
+    isAiLoading: {},
+    playingClipIndex: 0
   });
 
   const [isPlaying, setIsPlaying] = useState(false);
+  const videoRef = React.useRef<HTMLVideoElement>(null);
+
+  const handleVideoEnded = () => {
+    const videoClips = state.timelineClips.filter(c => c.type === 'video' || c.type === 'image');
+    if (state.playingClipIndex < videoClips.length - 1) {
+      updateState({ playingClipIndex: state.playingClipIndex + 1 });
+    } else {
+      setIsPlaying(false);
+      updateState({ playingClipIndex: 0 });
+    }
+  };
+
+  React.useEffect(() => {
+    const videoClips = state.timelineClips.filter(c => c.type === 'video' || c.type === 'image');
+    const activeClip = videoClips[state.playingClipIndex];
+
+    if (isPlaying) {
+      if (activeClip && activeClip.type === 'image') {
+        const timer = setTimeout(handleVideoEnded, (activeClip.duration || 3) * 1000);
+        return () => clearTimeout(timer);
+      } else if (videoRef.current) {
+        videoRef.current.play().catch(e => console.warn("Auto-play prevented", e));
+      }
+    } else if (!isPlaying && videoRef.current) {
+      videoRef.current.pause();
+    }
+  }, [isPlaying, state.playingClipIndex, state.timelineClips]);
 
   const updateState = (patch: Partial<VideoEditorState>) => setState(s => ({ ...s, ...patch }));
 
@@ -228,72 +259,62 @@ export function VideoEditorModule({ onApprove }: VideoEditorModuleProps) {
   };
 
   // ── AI кнопки — реальный Gemini ──────────────────────────────────────────
-  const generateEditPlan = async () => {
-    updateState({ isRendering: true });
+  const runAiAction = async (actionKey: string, task: string, ctx: string[], onSuccess: (result: string) => void) => {
+    updateState({ isAiLoading: { ...state.isAiLoading, [actionKey]: true } });
     try {
-      const result = await callGemini("Создать монтажный план (EDL) с таймкодами, типами cuts и переходами. Формат: номер | таймкод | тип | описание", getSceneContext());
-      updateState({ isRendering: false, editDecisionList: result });
-    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
+      const result = await callGemini(task, ctx);
+      onSuccess(result);
+    } catch (err: any) { alert(err.message); }
+    finally { updateState({ isAiLoading: { ...state.isAiLoading, [actionKey]: false } }); }
   };
 
-  const generateCutList = async () => {
-    updateState({ isRendering: true });
-    try {
-      const result = await callGemini("Создать cut list: список разрезов с таймкодами и типами переходов", getSceneContext());
-      updateState({ isRendering: false, cutList: result.split("\n").filter(Boolean) });
-    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
+  const generateEditPlan = () => runAiAction('generateEditPlan', "Создать монтажный план (EDL) с таймкодами, типами cuts и переходами. Формат: номер | таймкод | тип | описание", getSceneContext(), res => updateState({ editDecisionList: res }));
+  const generateCutList = () => runAiAction('generateCutList', "Создать cut list: список разрезов с таймкодами и типами переходов", getSceneContext(), res => updateState({ cutList: res.split("\n").filter(Boolean) }));
+  const suggestTransitions = () => runAiAction('suggestTransitions', "Предложить оптимальные переходы между клипами для кинематографичного монтажа", getSceneContext(), res => updateState({ aiSuggestions: [{ title: "Переходы (Gemini)", text: res }, ...state.aiSuggestions] }));
+  const suggestTitles = () => runAiAction('suggestTitles', "Предложить кинематографичные титры: текст, позиция, стиль анимации", [...getSceneContext(), `Цветокоррекция: ${state.selectedColorGrade ?? "не выбрана"}`], res => updateState({ aiSuggestions: [{ title: "Титры (Gemini)", text: res }, ...state.aiSuggestions] }));
+  const suggestColorGrade = () => runAiAction('suggestColorGrade', "Предложить цветокоррекцию и LUT стиль исходя из жанра и настроения сцен", getSceneContext(), res => updateState({ aiSuggestions: [{ title: "Цветокоррекция (Gemini)", text: res }, ...state.aiSuggestions] }));
+  const findEditWeaknesses = () => runAiAction('findEditWeaknesses', "Найти слабые места монтажа: длинные планы, неудачные переходы, ритм", [...getSceneContext(), `EDL: ${state.editDecisionList || "нет"}`], res => updateState({ aiSuggestions: [{ title: "Слабые места (Gemini)", text: res }, ...state.aiSuggestions] }));
+  const syncWithMusic = () => {
+    const audioClips = state.timelineClips.filter(c => c.type === "audio").map(c => c.title);
+    runAiAction('syncWithMusic', "Синхронизировать монтаж с музыкой: точки разрезов на сильные доли, BPM-based cuts", [...getSceneContext(), `Аудио треки: ${audioClips.join(", ") || "нет"}`], res => updateState({ musicSyncNotes: res, aiSuggestions: [{ title: "Синх. с музыкой (Gemini)", text: res }, ...state.aiSuggestions] }));
+  };
+  const generateEdl = () => runAiAction('generateEdl', "Сгенерировать EDL (Edit Decision List) в профессиональном формате", getSceneContext(), res => updateState({ editDecisionList: res, aiSuggestions: [{ title: "EDL (Gemini)", text: res }, ...state.aiSuggestions] }));
+
+  // ── Utils ──────────────────────────────────────────────────────────────────
+  const splitClip = () => {
+    if (!state.selectedClipId) return;
+    const clipIndex = state.timelineClips.findIndex(c => c.id === state.selectedClipId);
+    if (clipIndex === -1) return;
+    const clip = state.timelineClips[clipIndex];
+    
+    const newClip1 = { ...clip, id: `clip-${Date.now()}-1`, duration: clip.duration / 2 };
+    const newClip2 = { ...clip, id: `clip-${Date.now()}-2`, duration: clip.duration / 2, startTime: clip.startTime + clip.duration / 2 };
+    
+    const newClips = [...state.timelineClips];
+    newClips.splice(clipIndex, 1, newClip1, newClip2);
+    
+    updateState({ timelineClips: newClips, selectedClipId: newClip1.id });
   };
 
-  const suggestTransitions = async () => {
-    updateState({ isRendering: true });
-    try {
-      const result = await callGemini("Предложить оптимальные переходы между клипами для кинематографичного монтажа", getSceneContext());
-      updateState({ isRendering: false, aiSuggestions: [{ title: "Переходы (Gemini)", text: result }, ...state.aiSuggestions] });
-    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
+  const downloadEDL = () => {
+    if (!state.editDecisionList) return alert("EDL пуст!");
+    const blob = new Blob([state.editDecisionList], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = "edit-decision-list.edl";
+    a.click();
+    URL.revokeObjectURL(url);
   };
 
-  const suggestTitles = async () => {
-    updateState({ isRendering: true });
-    try {
-      const ctx = [...getSceneContext(), `Цветокоррекция: ${state.selectedColorGrade ?? "не выбрана"}`];
-      const result = await callGemini("Предложить кинематографичные титры: текст, позиция, стиль анимации", ctx);
-      updateState({ isRendering: false, aiSuggestions: [{ title: "Титры (Gemini)", text: result }, ...state.aiSuggestions] });
-    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
-  };
-
-  const suggestColorGrade = async () => {
-    updateState({ isRendering: true });
-    try {
-      const result = await callGemini("Предложить цветокоррекцию и LUT стиль исходя из жанра и настроения сцен", getSceneContext());
-      updateState({ isRendering: false, aiSuggestions: [{ title: "Цветокоррекция (Gemini)", text: result }, ...state.aiSuggestions] });
-    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
-  };
-
-  const findEditWeaknesses = async () => {
-    updateState({ isRendering: true });
-    try {
-      const ctx = [...getSceneContext(), `EDL: ${state.editDecisionList || "нет"}`];
-      const result = await callGemini("Найти слабые места монтажа: длинные планы, неудачные переходы, ритм", ctx);
-      updateState({ isRendering: false, aiSuggestions: [{ title: "Слабые места (Gemini)", text: result }, ...state.aiSuggestions] });
-    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
-  };
-
-  const syncWithMusic = async () => {
-    updateState({ isRendering: true });
-    try {
-      const audioClips = state.timelineClips.filter(c => c.type === "audio").map(c => c.title);
-      const ctx = [...getSceneContext(), `Аудио треки: ${audioClips.join(", ") || "нет"}`];
-      const result = await callGemini("Синхронизировать монтаж с музыкой: точки разрезов на сильные доли, BPM-based cuts", ctx);
-      updateState({ isRendering: false, musicSyncNotes: result, aiSuggestions: [{ title: "Синх. с музыкой (Gemini)", text: result }, ...state.aiSuggestions] });
-    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
-  };
-
-  const generateEdl = async () => {
-    updateState({ isRendering: true });
-    try {
-      const result = await callGemini("Сгенерировать EDL (Edit Decision List) в профессиональном формате", getSceneContext());
-      updateState({ isRendering: false, editDecisionList: result, aiSuggestions: [{ title: "EDL (Gemini)", text: result }, ...state.aiSuggestions] });
-    } catch (err: any) { updateState({ isRendering: false }); alert(err.message); }
+  const downloadSelectedClip = () => {
+    if (!state.selectedClipId) return alert("Выберите клип на таймлайне");
+    const clip = state.timelineClips.find(c => c.id === state.selectedClipId);
+    if (!clip || !clip.url) return;
+    const a = document.createElement('a');
+    a.href = clip.url;
+    a.download = `clip-${clip.title.replace(/[^a-z0-9]/gi, '_')}.mp4`;
+    a.click();
   };
 
   return (
@@ -344,14 +365,24 @@ export function VideoEditorModule({ onApprove }: VideoEditorModuleProps) {
         <div className="flex flex-col gap-4 bg-black/40 border border-slate-800 p-4 rounded-xl">
            <span className="text-[10px] uppercase font-bold tracking-widest text-[#00F0FF]">3. Область Предпросмотра (Preview)</span>
            <div className="w-full aspect-video bg-black rounded-lg border border-slate-700 relative flex items-center justify-center overflow-hidden shadow-black shadow-inner">
-              {state.timelineClips.length > 0 ? (
-                 <img src={state.timelineClips[0].url} className="w-full h-full object-cover opacity-80 mix-blend-screen" alt="Preview" />
-              ) : (
-                 <div className="text-slate-700 flex flex-col items-center gap-2">
-                    <Play className="w-12 h-12" />
-                    <span className="text-xs uppercase font-bold tracking-widest">Нет медиа на таймлайне</span>
-                 </div>
-              )}
+              {(() => {
+                 const videoClips = state.timelineClips.filter(c => c.type === "video" || c.type === "image");
+                 if (videoClips.length > 0) {
+                   const activeClip = videoClips[state.playingClipIndex] || videoClips[0];
+                   if (activeClip.type === 'video') {
+                     return <video ref={videoRef} src={activeClip.url} onEnded={handleVideoEnded} className="w-full h-full object-contain mix-blend-screen opacity-90" playsInline />;
+                   } else {
+                     return <img src={activeClip.url} className="w-full h-full object-contain mix-blend-screen opacity-90" alt="Preview" />;
+                   }
+                 } else {
+                   return (
+                     <div className="text-slate-700 flex flex-col items-center gap-2">
+                        <Play className="w-12 h-12" />
+                        <span className="text-xs uppercase font-bold tracking-widest">Нет медиа на таймлайне</span>
+                     </div>
+                   );
+                 }
+              })()}
 
               {/* Title overlay in preview */}
               {state.titleItems.map(t => (
@@ -399,7 +430,7 @@ export function VideoEditorModule({ onApprove }: VideoEditorModuleProps) {
              <div className="flex bg-slate-800/50 rounded h-16 w-full min-w-[600px] items-center px-2 relative border-l-2 border-indigo-500">
                <span className="absolute left-[-24px] rotate-[-90deg] uppercase text-[8px] font-bold text-indigo-500/50 mix-blend-screen tracking-widest w-16 text-center">VIDEO</span>
                 {state.timelineClips.filter(c => c.type === 'video' || c.type === 'image').map((c, i) => (
-                  <div key={c.id} onClick={() => updateState({ selectedClipId: c.id })} className={`h-12 border ${state.selectedClipId === c.id ? 'border-[#00F0FF] bg-[#00F0FF]/20' : 'border-indigo-500/50 bg-indigo-900/30'} rounded-lg mx-1 relative overflow-hidden flex cursor-pointer hover:border-[#00F0FF]/50 transition-colors cursor-pointer group`} style={{ width: c.type === 'video' ? '120px' : '80px', flexShrink: 0 }}>
+                  <div key={c.id} onClick={() => { updateState({ selectedClipId: c.id, playingClipIndex: i }); setIsPlaying(false); }} className={`h-12 border ${state.selectedClipId === c.id ? 'border-[#00F0FF] bg-[#00F0FF]/20' : i === state.playingClipIndex ? 'border-amber-400 bg-amber-400/20' : 'border-indigo-500/50 bg-indigo-900/30'} rounded-lg mx-1 relative overflow-hidden flex cursor-pointer hover:border-[#00F0FF]/50 transition-colors group`} style={{ width: c.type === 'video' ? '120px' : '80px', flexShrink: 0 }}>
                     {c.type === 'video' || c.type === 'image' ? <img src={c.url} className="w-full h-full object-cover opacity-50" /> : null}
                     <div className="absolute inset-0 bg-gradient-to-r from-black/60 to-transparent flex items-center px-2">
                        <span className="text-[9px] font-bold text-white truncate break-words w-full">{c.title}</span>
@@ -448,8 +479,9 @@ export function VideoEditorModule({ onApprove }: VideoEditorModuleProps) {
                         <option value="glitch">Glitch</option>
                       </select>
                     </div>
-                    <div className="flex items-end">
-                       <button className="h-9 px-3 w-full bg-slate-800 border border-slate-600 rounded text-xs text-slate-300 hover:text-white flex items-center justify-center gap-2"><Scissors className="w-3.5 h-3.5" /> Разрезать</button>
+                    <div className="flex flex-col gap-2 col-span-2 md:col-span-2">
+                       <button onClick={splitClip} className="h-9 px-3 w-full bg-slate-800 border border-slate-600 rounded text-xs text-slate-300 hover:text-white flex items-center justify-center gap-2"><Scissors className="w-3.5 h-3.5" /> Разрезать</button>
+                       <button onClick={downloadSelectedClip} className="h-9 px-3 w-full bg-indigo-900 border border-indigo-500 rounded text-xs text-indigo-300 hover:text-white flex items-center justify-center gap-2"><Download className="w-3.5 h-3.5" /> Скачать клип</button>
                     </div>
                  </div>
               ) : (
@@ -507,14 +539,11 @@ export function VideoEditorModule({ onApprove }: VideoEditorModuleProps) {
            
            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div className="flex flex-col gap-2 relative">
-                 <label className="text-[10px] text-indigo-300 uppercase font-bold px-1">Монтажный план (EDL)</label>
-                 <textarea 
-                   placeholder="Сгенерируйте EDL или напишите вручную"
-                   value={state.editDecisionList}
-                   onChange={e => updateState({ editDecisionList: e.target.value })}
-                   className="w-full h-32 bg-indigo-950/40 border border-indigo-500/40 rounded-xl p-3 text-xs text-white custom-scrollbar focus:border-[#00F0FF]/50 outline-none resize-none font-mono"
-                 />
-                 <button onClick={generateEditPlan} className="absolute top-0 right-0 text-[10px] text-indigo-200 hover:text-white px-2 mt-0.5">Автогенерация</button>
+                  <label className="text-[10px] text-indigo-300 uppercase font-bold px-1">Монтажный план (EDL)</label>
+                  <div className="flex gap-2 absolute top-0 right-0 mt-0.5">
+                    <button onClick={downloadEDL} className="text-[10px] text-emerald-300 hover:text-white px-2 border border-emerald-500/30 rounded">Скачать EDL</button>
+                    <button onClick={generateEditPlan} disabled={state.isAiLoading['generateEditPlan']} className="text-[10px] text-indigo-200 hover:text-white px-2 disabled:opacity-50">Автогенерация</button>
+                  </div>
               </div>
               <div className="flex flex-col justify-end gap-3 pb-1">
                  {state.isRendering ? (
@@ -560,33 +589,33 @@ export function VideoEditorModule({ onApprove }: VideoEditorModuleProps) {
         <div className="p-4 flex flex-col gap-4 overflow-y-auto custom-scrollbar flex-1">
           <div className="flex flex-col gap-2">
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest px-1">Анализ и монтаж</span>
-            <button onClick={suggestTransitions} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">
-              <Split className="w-3.5 h-3.5 text-blue-400" /> Предложить переходы
+            <button onClick={suggestTransitions} disabled={state.isAiLoading['suggestTransitions']} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2 disabled:opacity-50">
+              {state.isAiLoading['suggestTransitions'] ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Split className="w-3.5 h-3.5 text-blue-400" />} Предложить переходы
             </button>
-            <button onClick={syncWithMusic} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">
-              <Music className="w-3.5 h-3.5 text-indigo-400" /> Синхронизоровать с музыкой
+            <button onClick={syncWithMusic} disabled={state.isAiLoading['syncWithMusic']} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2 disabled:opacity-50">
+              {state.isAiLoading['syncWithMusic'] ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Music className="w-3.5 h-3.5 text-indigo-400" />} Синхронизоровать с музыкой
             </button>
-            <button onClick={suggestTitles} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">
-              <Type className="w-3.5 h-3.5 text-yellow-500" /> Предложить титры
+            <button onClick={suggestTitles} disabled={state.isAiLoading['suggestTitles']} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2 disabled:opacity-50">
+              {state.isAiLoading['suggestTitles'] ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Type className="w-3.5 h-3.5 text-yellow-500" />} Предложить титры
             </button>
-            <button onClick={suggestColorGrade} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">
-              <Sliders className="w-3.5 h-3.5 text-purple-400" /> Предложить цветокоррекцию
+            <button onClick={suggestColorGrade} disabled={state.isAiLoading['suggestColorGrade']} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2 disabled:opacity-50">
+              {state.isAiLoading['suggestColorGrade'] ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Sliders className="w-3.5 h-3.5 text-purple-400" />} Предложить цветокоррекцию
             </button>
-            <button onClick={findEditWeaknesses} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">
-              <AlertCircle className="w-3.5 h-3.5 text-rose-500" /> Найти слабые места
+            <button onClick={findEditWeaknesses} disabled={state.isAiLoading['findEditWeaknesses']} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2 disabled:opacity-50">
+              {state.isAiLoading['findEditWeaknesses'] ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <AlertCircle className="w-3.5 h-3.5 text-rose-500" />} Найти слабые места
             </button>
           </div>
 
           <div className="flex flex-col gap-2 mt-2">
             <span className="text-[10px] text-slate-500 font-bold uppercase tracking-widest px-1">Генерация</span>
-            <button onClick={generateEditPlan} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">
-              <FileText className="w-3.5 h-3.5 text-rose-400" /> Создать монтажный план
+            <button onClick={generateEditPlan} disabled={state.isAiLoading['generateEditPlan']} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2 disabled:opacity-50">
+              {state.isAiLoading['generateEditPlan'] ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <FileText className="w-3.5 h-3.5 text-rose-400" />} Создать монтажный план
             </button>
-            <button onClick={generateCutList} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">
-              <Scissors className="w-3.5 h-3.5 text-emerald-400" /> Создать cut list
+            <button onClick={generateCutList} disabled={state.isAiLoading['generateCutList']} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2 disabled:opacity-50">
+              {state.isAiLoading['generateCutList'] ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Scissors className="w-3.5 h-3.5 text-emerald-400" />} Создать cut list
             </button>
-            <button onClick={generateEdl} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2">
-              <Layers className="w-3.5 h-3.5 text-[#00F0FF]" /> Создать EDL
+            <button onClick={generateEdl} disabled={state.isAiLoading['generateEdl']} className="w-full py-2 px-3 bg-slate-900 border border-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-bold transition-colors text-left flex items-center gap-2 disabled:opacity-50">
+              {state.isAiLoading['generateEdl'] ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Layers className="w-3.5 h-3.5 text-[#00F0FF]" />} Создать EDL
             </button>
           </div>
           
