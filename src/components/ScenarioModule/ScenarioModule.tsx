@@ -187,19 +187,19 @@ export function ScenarioModule({ onApprove, isApproved }: ScenarioModuleProps) {
     const genres = (parsed.selectedGenres || []).join(", ");
     const moods = (parsed.selectedMoods || []).join(", ");
     
-    let importText = `📌 [ИМПОРТИРОВАННАЯ ИДЕЯ & ПРОМПТ]\n`;
-    if (idea) importText += `• ИДЕЯ: ${idea}\n`;
-    if (logline) importText += `• ЛОГЛАЙН: ${logline}\n`;
-    if (synopsis) importText += `• СИНОПСИС: ${synopsis}\n`;
-    if (genres) importText += `• ЖАНРЫ: ${genres}\n`;
-    if (moods) importText += `• НАСТРОЕНИЕ: ${moods}\n`;
-    if (parsed.selectedEra) importText += `• ЭПОХА: ${parsed.selectedEra}\n`;
-    if (parsed.selectedVisualStyle) importText += `• ВИЗУАЛЬНЫЙ СТИЛЬ: ${parsed.selectedVisualStyle}\n`;
-    if (prompt) importText += `• РЕЖИССЁРСКИЙ ПРОМПТ: ${prompt}\n`;
+    let importText = `📌 [ИМПОРТИРОВАННАЯ ИДЕЯ & ПРОМПТ]n`;
+    if (idea) importText += `• ИДЕЯ: ${idea}n`;
+    if (logline) importText += `• ЛОГЛАЙН: ${logline}n`;
+    if (synopsis) importText += `• СИНОПСИС: ${synopsis}n`;
+    if (genres) importText += `• ЖАНРЫ: ${genres}n`;
+    if (moods) importText += `• НАСТРОЕНИЕ: ${moods}n`;
+    if (parsed.selectedEra) importText += `• ЭПОХА: ${parsed.selectedEra}n`;
+    if (parsed.selectedVisualStyle) importText += `• ВИЗУАЛЬНЫЙ СТИЛЬ: ${parsed.selectedVisualStyle}n`;
+    if (prompt) importText += `• РЕЖИССЁРСКИЙ ПРОМПТ: ${prompt}n`;
 
     setState(s => ({
       ...s,
-      scriptDraft: (s.scriptDraft ? s.scriptDraft + "\n\n" : "") + importText.trim(),
+      scriptDraft: (s.scriptDraft ? s.scriptDraft + "nn" : "") + importText.trim(),
       importedIdeaPrompt: idea || prompt || "Идея импортирована"
     }));
     setLocalToast({ message: "Контекст темы и идеи успешно импортирован!", type: "success" });
@@ -220,17 +220,17 @@ export function ScenarioModule({ onApprove, isApproved }: ScenarioModuleProps) {
         return;
       }
 
-      let importText = `👥 [ИМПОРТИРОВАННЫЕ ПЕРСОНАЖИ]\n`;
+      let importText = `👥 [ИМПОРТИРОВАННЫЕ ПЕРСОНАЖИ]n`;
       charList.forEach((c) => {
-        importText += `• ${c.characterName} (${c.characterRole || "Без роли"}, ${c.characterAge || "Adulthood"} лет):\n`;
-        if (c.characterDescription) importText += `  Биография & описание: ${c.characterDescription}\n`;
-        if (c.appearanceDescription) importText += `  Внешние черты: ${c.appearanceDescription}\n`;
-        if (c.outfitDescription) importText += `  Стиль одежды: ${c.outfitDescription}\n`;
+        importText += `• ${c.characterName} (${c.characterRole || "Без роли"}, ${c.characterAge || "Adulthood"} лет):n`;
+        if (c.characterDescription) importText += `  Биография & описание: ${c.characterDescription}n`;
+        if (c.appearanceDescription) importText += `  Внешние черты: ${c.appearanceDescription}n`;
+        if (c.outfitDescription) importText += `  Стиль одежды: ${c.outfitDescription}n`;
       });
 
       setState(s => ({
         ...s,
-        scriptDraft: (s.scriptDraft ? s.scriptDraft + "\n\n" : "") + importText.trim(),
+        scriptDraft: (s.scriptDraft ? s.scriptDraft + "nn" : "") + importText.trim(),
         importedCharacters: charList
       }));
       setLocalToast({ message: `Успешно импортирован профиль героев (${charList.length})!`, type: "success" });
@@ -314,7 +314,7 @@ ${draftText}`;
     const sysInstruction = `You are an expert Storyboard Director. Based on the user's concept and duration, break it down logically into EXACTLY ${blocks} sequential scenes.
 CRITICAL DIRECTIVE: Every scene represents exactly ONE 8-second video clip generator slot. You must output exactly ${blocks} distinct scenes.
 
-You must return ONLY a raw valid JSON array of objects representing scenes. Do NOT wrap in markdown code blocks (\`\`\`json or \`\`\`), do NOT output any conversational text.
+You must return ONLY a raw valid JSON array of objects representing scenes. Do NOT wrap in markdown code blocks (e.g. json code blocks), do NOT output any conversational text.
 
 Each object in the JSON array must contain exactly these keys:
 - "title": string (scene title in Russian)
@@ -341,18 +341,18 @@ Example output schema to follow exactly:
     runAiAction(`Сгенерировать раскадровку (${blocks} сцен)`, customPrompt, (res) => {
       try {
         let clean = res.trim();
-        const match = clean.match(/\[\s*\{[\s\S]*\}\s*\]/);
+        const match = clean.match(/[s*{[sS]*}s*]/);
         if (match) {
           clean = match[0];
         } else {
-          clean = clean.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim();
+          clean = clean.replace(/^```(?:json)?s*/i, "").replace(/s*```$/, "").trim();
         }
 
         const parsed = JSON.parse(clean);
         if (Array.isArray(parsed) && parsed.length > 0) {
           const formatted: Scene[] = parsed.map((sc, idx) => ({
             id: "sc_" + Math.random().toString(36).substring(7),
-            title: sc.title || \`Сцена \${idx + 1}\`,
+            title: sc.title || `Сцена ${idx + 1}`,
             description: sc.description || "",
             location: sc.location || "",
             characters: sc.characters || "",
@@ -366,7 +366,7 @@ Example output schema to follow exactly:
             scenes: formatted,
             selectedSceneId: formatted[0].id
           }));
-          setLocalToast({ message: \`Успешно сгенерировано \${formatted.length} сцен (с промптами для видео)!\`, type: "success" });
+          setLocalToast({ message: `Успешно сгенерировано ${formatted.length} сцен (с промптами для видео)!`, type: "success" });
           setActiveTab('scenes');
           
           setTimeout(() => {
@@ -385,7 +385,7 @@ Example output schema to follow exactly:
   };
 
   const buildFinalScript = () => {
-    const text = state.scenes.map(sc => \`## \${sc.title}\n**Локация:** \${sc.location}\n**Сюжет:** \${sc.description}\n**Действие:** \${sc.action}\n**Видео-промпт:** \${sc.videoPrompt}\n\n\`).join('');
+    const text = state.scenes.map(sc => `## ${sc.title}n**Локация:** ${sc.location}n**Сюжет:** ${sc.description}n**Действие:** ${sc.action}n**Видео-промпт:** ${sc.videoPrompt}nn`).join('');
     updateField('finalScript', text || state.scriptDraft);
     setActiveTab('final');
   };
@@ -397,7 +397,7 @@ Example output schema to follow exactly:
     const textToApply = suggestion.text;
 
     if (activeTab === 'draft') {
-      setState(s => ({ ...s, scriptDraft: action === 'replace' ? textToApply : s.scriptDraft + '\n\n' + textToApply }));
+      setState(s => ({ ...s, scriptDraft: action === 'replace' ? textToApply : s.scriptDraft + 'nn' + textToApply }));
       setLocalToast({ message: "Черновик обновлен!", type: "success" });
     } else if (activeTab === 'scenes') {
       const selectedId = state.selectedSceneId;
@@ -406,13 +406,13 @@ Example output schema to follow exactly:
           ...s,
           scenes: s.scenes.map(sc => sc.id === selectedId ? {
             ...sc,
-            action: action === 'replace' ? textToApply : (sc.action ? sc.action + '\n\n' + textToApply : textToApply),
-            description: action === 'replace' ? textToApply : (sc.description ? sc.description + '\n\n' + textToApply : textToApply)
+            action: action === 'replace' ? textToApply : (sc.action ? sc.action + 'nn' + textToApply : textToApply),
+            description: action === 'replace' ? textToApply : (sc.description ? sc.description + 'nn' + textToApply : textToApply)
           } : sc)
         }));
         setLocalToast({ message: "Сцена обновлена!", type: "success" });
       } else {
-        setState(s => ({ ...s, scriptDraft: action === 'replace' ? textToApply : s.scriptDraft + '\n\n' + textToApply }));
+        setState(s => ({ ...s, scriptDraft: action === 'replace' ? textToApply : s.scriptDraft + 'nn' + textToApply }));
         setLocalToast({ message: "Сцена не выбрана. Текст добавлен в общий черновик!", type: "success" });
       }
     } else if (activeTab === 'dialogues') {
@@ -433,14 +433,14 @@ Example output schema to follow exactly:
         }));
         setLocalToast({ message: "Реплика добавлена!", type: "success" });
       } else {
-        setState(s => ({ ...s, scriptDraft: action === 'replace' ? textToApply : s.scriptDraft + '\n\n' + textToApply }));
+        setState(s => ({ ...s, scriptDraft: action === 'replace' ? textToApply : s.scriptDraft + 'nn' + textToApply }));
         setLocalToast({ message: "Сцена не выбрана. Текст добавлен в черновик!", type: "success" });
       }
     } else if (activeTab === 'final') {
-      setState(s => ({ ...s, finalScript: action === 'replace' ? textToApply : s.finalScript + '\n\n' + textToApply }));
+      setState(s => ({ ...s, finalScript: action === 'replace' ? textToApply : s.finalScript + 'nn' + textToApply }));
       setLocalToast({ message: "Финальный сценарий обновлен!", type: "success" });
     } else {
-      setState(s => ({ ...s, scriptDraft: action === 'replace' ? textToApply : s.scriptDraft + '\n\n' + textToApply }));
+      setState(s => ({ ...s, scriptDraft: action === 'replace' ? textToApply : s.scriptDraft + 'nn' + textToApply }));
       setLocalToast({ message: "Черновик обновлен предложениями ИИ!", type: "success" });
     }
     
@@ -452,14 +452,14 @@ Example output schema to follow exactly:
   const saveScenarioModule = () => {
     const saveData = { scenes: state.scenes, finalScript: state.finalScript, scriptDraft: state.scriptDraft, savedAt: new Date().toISOString() };
     localStorage.setItem("aura_scenario_state", JSON.stringify(saveData));
-    setLocalToast({ message: \`Сценарий сохранён: \${state.scenes.length} сцен.\`, type: "success" });
+    setLocalToast({ message: `Сценарий сохранён: ${state.scenes.length} сцен.`, type: "success" });
     onApprove();
   };
 
   const sendToFrameGeneratorModule = () => { saveScenarioModule(); };
   const sendToVideoGeneratorModule = () => { saveScenarioModule(); };
   const sendToTTSModule = () => {
-    const text = state.scenes.map(sc => sc.action || sc.title).filter(Boolean).join("\n\n");
+    const text = state.scenes.map(sc => sc.action || sc.title).filter(Boolean).join("nn");
     localStorage.setItem("aura_scenario_tts_text", text);
     setLocalToast({ message: "Текст сцен сохранён для модуля «Голос / TTS».", type: "success" });
   };
@@ -472,11 +472,11 @@ Example output schema to follow exactly:
             initial={{ opacity: 0, y: -25, scale: 0.95 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -15, scale: 0.95 }}
-            className={\`fixed top-6 right-6 z-[100] flex items-center gap-2 px-4 py-3.5 rounded-xl border text-sm font-medium shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-md bg-slate-900/95 min-w-[300px] \${
+            className={`fixed top-6 right-6 z-[100] flex items-center gap-2 px-4 py-3.5 rounded-xl border text-sm font-medium shadow-[0_10px_30px_rgba(0,0,0,0.5)] backdrop-blur-md bg-slate-900/95 min-w-[300px] ${
               localToast.type === 'success' 
                 ? 'border-emerald-500/40 text-emerald-400' 
                 : 'border-rose-500/40 text-rose-400'
-            }\`}
+            }`}
           >
             <AlertCircle className="w-4 h-4 shrink-0 text-current" />
             <span className="flex-1">{localToast.message}</span>
@@ -500,11 +500,11 @@ Example output schema to follow exactly:
             
             <button
               onClick={saveScenarioModule}
-              className={\`px-6 py-2 rounded-xl font-bold uppercase text-xs tracking-widest transition-all flex items-center gap-2 \${
+              className={`px-6 py-2 rounded-xl font-bold uppercase text-xs tracking-widest transition-all flex items-center gap-2 ${
                 isApproved 
                   ? 'bg-emerald-500 text-white shadow-[0_0_15px_rgba(16,185,129,0.3)] hover:bg-emerald-400' 
                   : 'bg-[#00F0FF] text-black hover:bg-[#4dffff] shadow-[0_0_15px_rgba(0,240,255,0.2)]'
-              }\`}
+              }`}
             >
               <CheckCircle2 className="w-4 h-4" />
               {isApproved ? 'Сценарий утвержден ✓' : 'Подтвердить и зафиксировать'}
@@ -514,25 +514,25 @@ Example output schema to follow exactly:
           <div className="flex flex-wrap gap-2 p-1 bg-black/40 rounded-xl border border-slate-800 sticky top-0 z-10 backdrop-blur-md">
             <button 
               onClick={() => { document.getElementById('section-draft')?.scrollIntoView({ behavior: 'smooth' }); setActiveTab('draft'); }} 
-              className={\`px-4 py-2 rounded-lg text-sm transition-all \${activeTab === 'draft' ? 'bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}\`}
+              className={`px-4 py-2 rounded-lg text-sm transition-all ${activeTab === 'draft' ? 'bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
             >
               1. Источник & Настройки
             </button>
             <button 
               onClick={() => { document.getElementById('section-scenes')?.scrollIntoView({ behavior: 'smooth' }); setActiveTab('scenes'); }} 
-              className={\`px-4 py-2 rounded-lg text-sm transition-all \${activeTab === 'scenes' ? 'bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}\`}
+              className={`px-4 py-2 rounded-lg text-sm transition-all ${activeTab === 'scenes' ? 'bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
             >
               2. Раскадровка (Сцены)
             </button>
             <button 
               onClick={() => { document.getElementById('section-dialogues')?.scrollIntoView({ behavior: 'smooth' }); setActiveTab('dialogues'); }} 
-              className={\`px-4 py-2 rounded-lg text-sm transition-all \${activeTab === 'dialogues' ? 'bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}\`}
+              className={`px-4 py-2 rounded-lg text-sm transition-all ${activeTab === 'dialogues' ? 'bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
             >
               3. Диалоги
             </button>
             <button 
               onClick={() => { document.getElementById('section-final')?.scrollIntoView({ behavior: 'smooth' }); setActiveTab('final'); }} 
-              className={\`px-4 py-2 rounded-lg text-sm transition-all \${activeTab === 'final' ? 'bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}\`}
+              className={`px-4 py-2 rounded-lg text-sm transition-all ${activeTab === 'final' ? 'bg-[#00F0FF]/15 text-[#00F0FF] border border-[#00F0FF]/30 font-bold' : 'text-slate-400 hover:bg-slate-800 hover:text-white'}`}
             >
               4. Финальный сценарий
             </button>
@@ -619,11 +619,11 @@ Example output schema to follow exactly:
                   {state.scenes.map((sc, index) => (
                     <div 
                       key={sc.id} 
-                      className={\`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all \${state.selectedSceneId === sc.id ? 'bg-[#00F0FF]/10 border-[#00F0FF]/50 text-white' : 'bg-black/40 border-slate-800 text-slate-400 hover:border-slate-600'}\`}
+                      className={`flex items-center justify-between p-3 rounded-lg border cursor-pointer transition-all ${state.selectedSceneId === sc.id ? 'bg-[#00F0FF]/10 border-[#00F0FF]/50 text-white' : 'bg-black/40 border-slate-800 text-slate-400 hover:border-slate-600'}`}
                       onClick={() => setState(s => ({ ...s, selectedSceneId: sc.id }))}
                     >
                       <div className="flex flex-col overflow-hidden pr-2">
-                        <span className="text-sm font-medium truncate">\${index + 1}. \${sc.title || 'Новая сцена'}</span>
+                        <span className="text-sm font-medium truncate">${index + 1}. ${sc.title || 'Новая сцена'}</span>
                         <span className="text-xs text-slate-500 truncate">{sc.location}</span>
                       </div>
                       <button onClick={(e) => { e.stopPropagation(); deleteScene(sc.id); }} className="text-slate-500 hover:text-red-400 shrink-0">
