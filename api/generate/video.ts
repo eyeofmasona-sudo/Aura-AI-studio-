@@ -15,11 +15,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!prompt) return res.status(400).json({ error: 'prompt is required' });
 
     const ai = new GoogleGenAI({ apiKey });
+    const videoModel = process.env.GOOGLE_AI_VIDEO_MODEL || 'veo-3.1-lite-generate-preview';
 
     const params: any = {
-      model: 'veo-3.1-lite-generate-preview',
+      model: videoModel,
       prompt,
-      config: { numberOfVideos, durationSeconds, generateAudio: false },
+      config: { numberOfVideos, durationSeconds },
     };
     if (firstFrameBase64) {
       params.image = { imageBytes: firstFrameBase64, mimeType: firstFrameMime };
