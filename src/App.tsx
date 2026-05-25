@@ -21,6 +21,7 @@ import { ExportModule } from './components/ExportModule/ExportModule';
 import { UsageModelsModule } from './components/UsageModelsModule';
 import { AiCostModal } from './components/AiCostModal';
 import { AiStore } from './services/aiStore';
+import { ProjectsStore } from './services/projectsStore';
 
 export default function App() {
   const [activeStepId, setActiveStepId] = useState('vision');
@@ -92,6 +93,10 @@ export default function App() {
         setUnlockedSteps([...unlockedSteps, nextId]);
       }
     }
+    
+    // Auto-save project logic triggered when anything is approved
+    ProjectsStore.getInstance().saveCurrentProject();
+
     const stepLabel = specData[currentIndex]?.title || "Шаг";
     setToast({ 
       message: `«${stepLabel}» успешно зафиксирован и сохранен в пайплайн производства!`, 

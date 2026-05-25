@@ -125,56 +125,71 @@ ${state.moodboardTags?.join(", ") || "Теги отсутствуют."}
       const charStateStr = localStorage.getItem("aura_character_state");
       if (charStateStr) {
         const state = JSON.parse(charStateStr);
-        const hasImg = state.generatedCharacterImages && state.generatedCharacterImages.length > 0;
-        const md = `# 👥 Спецификация Персонажа: ${state.characterName || "Безымянный герой"}
+        const chars = state.characters || [];
+        
+        if (chars.length > 0) {
+          let combinedMd = `# 👥 Кастинг и Персонажи проекта\n\n`;
+          let allImages: any[] = [];
 
-**Роль:** ${state.characterRole || "Главный герой"}
-**Возраст:** ${state.characterAge || "Не указан"}
-**Теги идентификации:** ${state.identityTags?.join(", ") || "Нет тегов"}
+          chars.forEach((char: any, index: number) => {
+             const hasImg = char.generatedCharacterImages && char.generatedCharacterImages.length > 0;
+             if (hasImg) {
+               allImages = [...allImages, ...char.generatedCharacterImages.map((img: any) => ({ ...img, charName: char.characterName }))];
+             }
 
-## 🔍 Описание персонажа:
-${state.characterDescription || "Описание отсутствует."}
+             combinedMd += `## ${index + 1}. ${char.characterName || "Безымянный герой"}
+**Роль:** ${char.characterRole || "Главный герой"}
+**Возраст:** ${char.characterAge || "Не указан"}
+**Пол/Тип:** ${char.gender === 'animal' ? 'Животное/Существо' : char.gender === 'female' ? 'Женский' : char.gender === 'male' ? 'Мужской' : 'Другой'}
 
-## 👗 Внешность и одежда:
-* **Лицо/Внешний вид:** ${state.appearanceDescription || "Нет деталей"}
-* **Одежда и стиль:** ${state.outfitDescription || "Нет деталей"}
+### 🔍 Описание персонажа:
+${char.characterDescription || "Описание отсутствует."}
 
-## 🧠 Личность и мотивы:
-* **Характер:** ${state.personalityDescription || "Нет деталей"}
-* **Цель героя:** ${state.characterGoal || "Нет деталей"}
-* **Скрытые страхи:** ${state.characterFear || "Нет деталей"}
+### 👗 Внешность и одежда:
+* **Лицо/Внешний вид:** ${char.appearanceDescription || "Нет деталей"}
+* **Одежда и стиль:** ${char.outfitDescription || "Нет деталей"}
 
-## 🧬 Техническая идентичность:
-* **Seed лица:** \`${state.identitySeed || "Не зафиксирован"}\`
-* **Исключения (Negative Prompt):** \`${state.negativePrompt || "Отсутствует"}\`
-* **Выбранная AI Модель:** ${state.selectedGenerationModel || "Nano Banana 2"}
+### 🧠 Личность и мотивы:
+* **Характер:** ${char.personalityDescription || "Нет деталей"}
+* **Цель героя:** ${char.characterGoal || "Нет деталей"}
+* **Конфликт/Страх:** ${char.characterConflict || char.characterFear || "Нет деталей"}
 
-## 🎬 Промпт Генерации Изображения:
+### 🎬 Промпт Генерации:
 \`\`\`text
-${this.buildCharacterImagePrompt(state)}
+${this.buildCharacterImagePrompt(char)}
 \`\`\`
 
----
-*Сгенерировано Aura AI Studio (${timestamp})*`;
+`;
+             if (hasImg) {
+               combinedMd += `### 📸 Сгенерированные портреты (Кастинг):\n`;
+               char.generatedCharacterImages.forEach((img: any) => {
+                  const isSelected = char.selectedCharacterImage === img.id ? " (⭐ Выбранный)" : "";
+                  combinedMd += `![Портрет ${isSelected}](${img.url})\n*Промпт: ${img.prompt}*\n\n`;
+               });
+             }
 
-        files.push({
-          id: "file-char-specs",
-          name: `2_Персонаж_${(state.characterName || "Герой").replace(/\s+/g, "_")}.md`,
-          type: "text",
-          content: md,
-          timestamp,
-          sizeKey: `${Math.ceil(md.length / 102.4) / 10} KB`
-        });
-
-        if (hasImg) {
-          files.push({
-            id: "file-char-images",
-            name: "2_Портреты_Кастинга.json",
-            type: "json",
-            content: JSON.stringify(state.generatedCharacterImages, null, 2),
-            timestamp,
-            sizeKey: `${Math.ceil(JSON.stringify(state.generatedCharacterImages).length / 102.4) / 10} KB`
+             combinedMd += `---\n\n`;
           });
+          
+          files.push({
+            id: "file-char-specs",
+            name: "2_Персонажи_Спецификации.md",
+            type: "text",
+            content: combinedMd + `*Сгенерировано Aura AI Studio (${timestamp})*`,
+            timestamp,
+            sizeKey: `${Math.ceil(combinedMd.length / 102.4) / 10} KB`
+          });
+
+          if (allImages.length > 0) {
+            files.push({
+              id: "file-char-images",
+              name: "2_Портреты_Кастинга.json",
+              type: "json",
+              content: JSON.stringify(allImages, null, 2),
+              timestamp,
+              sizeKey: `${Math.ceil(JSON.stringify(allImages).length / 102.4) / 10} KB`
+            });
+          }
         }
       }
     } catch (e) {
