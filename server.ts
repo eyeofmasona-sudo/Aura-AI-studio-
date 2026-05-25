@@ -274,7 +274,7 @@ CRITICAL RULES:
       const { prompt, numberOfImages = 1, aspectRatio = "16:9" } = req.body;
       if (!prompt) return res.status(400).json({ error: "prompt is required" });
 
-      const imageModel = process.env.GOOGLE_AI_IMAGE_MODEL || "gemini-2.5-flash-image";
+      const imageModel = process.env.GOOGLE_AI_IMAGE_MODEL || "imagen-4.0-generate-001";
       const response = await ai.models.generateImages({
         model: imageModel,
         prompt,
@@ -365,7 +365,7 @@ CRITICAL RULES:
   app.get("/api/capabilities", (_req, res) => {
     res.json({
       video: { model: process.env.GOOGLE_AI_VIDEO_MODEL || "veo-3.1-lite-generate-preview", enabled: !!effectiveApiKey },
-      image: { model: process.env.GOOGLE_AI_IMAGE_MODEL || "gemini-2.5-flash-image", enabled: !!effectiveApiKey },
+      image: { model: process.env.GOOGLE_AI_IMAGE_MODEL || "imagen-4.0-generate-001", enabled: !!effectiveApiKey },
       tts:   { model: process.env.GOOGLE_AI_TTS_MODEL || "gemini-3.1-flash-tts-preview", enabled: !!effectiveApiKey },
       music: { model: process.env.GOOGLE_AI_MUSIC_MODEL || "lyria-3-pro-preview", enabled: !!effectiveApiKey },
     });
