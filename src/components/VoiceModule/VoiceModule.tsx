@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Menu, Play, Pause, Trash2, Check, Copy, ArrowRight, Save, Layers,
-  Volume2, FastForward, Sliders, Settings, Mic, CheckSquare, Plus, AlertCircle, HelpCircle as HelpIcon, FileText, ChevronRight, Wand2, Sparkles, Code
+  Volume2, FastForward, Sliders, Settings, Mic, CheckSquare, Plus, AlertCircle, HelpCircle as HelpIcon, FileText, ChevronRight, Wand2, Sparkles, Code, Download, Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 
@@ -337,7 +337,15 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
     updateState({ isGenerating: true });
 
     try {
-      const textToSynthesize = state.voiceText || state.voiceLines.map(l => l.text).join(' ');
+      let textToSynthesize = "";
+      if (activeTab === 'ssml' && state.ssmlText) {
+        textToSynthesize = `[Режиссерская ремарка: Прочитай этот SSML-скрипт выразительно.]\n\n${state.ssmlText}`;
+      } else if (state.voiceLines.length > 0) {
+        textToSynthesize = state.voiceLines.map(l => `[Ремарка: персонаж ${l.character}, эмоция: ${l.emotionTag}, ${l.pauseNotes}, ${l.pronunciationNotes}] ${l.text}`).join('\n\n');
+        textToSynthesize = `[Общие настройки: Тон - ${state.selectedTone}, Темп - ${state.selectedSpeed}, Высота голоса - ${state.selectedPitch}]\n\n` + textToSynthesize;
+      } else {
+        textToSynthesize = `[Режиссерская ремарка: Тон - ${state.selectedTone}, Эмоция - ${state.selectedEmotion}, Темп - ${state.selectedSpeed}, Высота голоса - ${state.selectedPitch}]\n\n${state.voiceText}`;
+      }
 
       const voiceNameMap: Record<string, string> = {
         'мужской': 'Chant',
@@ -550,9 +558,10 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
                 <div className="flex flex-wrap gap-2">
                   <button 
                     onClick={improveVoiceText}
-                    className="px-3.5 py-2 bg-slate-900 border border-red-500/30 hover:bg-red-500/5 text-red-400 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5"
+                    disabled={state.isGenerating}
+                    className="px-3.5 py-2 bg-slate-900 border border-red-500/30 hover:bg-red-500/5 text-red-400 rounded-lg text-xs font-bold transition-colors flex items-center gap-1.5 disabled:opacity-50"
                   >
-                    <Wand2 className="w-3.5 h-3.5" /> Улучшить текст для озвучки
+                    {state.isGenerating ? <Loader2 className="w-3.5 h-3.5 animate-spin"/> : <Wand2 className="w-3.5 h-3.5" />} Улучшить текст для озвучки
                   </button>
                   <button 
                     onClick={splitTextIntoLines}
@@ -714,6 +723,21 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
                     ))}
                   </div>
                 </div>
+
+                {state.aiSuggestions.length > 0 && (
+                  <div className="pt-6 border-t border-slate-800 flex flex-col gap-3">
+                    <span className="text-[11px] font-extrabold uppercase tracking-widest text-[#00F0FF]">AI Советы / Направления</span>
+                    <div className="grid grid-cols-1 gap-3">
+                      {state.aiSuggestions.map((sug) => (
+                        <div key={sug.id} className="p-4 bg-indigo-900/10 border border-indigo-500/30 rounded-lg relative flex flex-col gap-1">
+                          <span className="font-bold text-indigo-300 text-xs">{sug.title}</span>
+                          <p className="text-slate-400 leading-relaxed text-xs">{sug.text}</p>
+                          <button onClick={() => setState(prev => ({...prev, aiSuggestions: prev.aiSuggestions.filter(s => s.id !== sug.id)}))} className="absolute top-2 right-2 w-6 h-6 flex items-center justify-center text-slate-500 hover:text-red-400 rounded transition-colors"><Trash2 className="w-3 h-3"/></button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </motion.div>
             )}
 
@@ -805,9 +829,11 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
                             </div>
                             <div className="flex items-center justify-between mt-auto">
                               <span className="text-[10px] text-slate-500 font-mono">{audio.duration} | {audio.createdAt}</span>
-                              <div className="flex gap-2">
-                                {!isSelected && <button onClick={() => selectGeneratedVoiceAudio(audio.id)} className="text-[10px] uppercase font-bold text-red-400 hover:text-red-300">Выбрать вариант</button>}
-                                {isSelected && <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded flex items-center gap-1"><Check className="w-3 h-3"/> Active</span>}
+                              <div className="flex gap-2 items-center">
+                                <button onClick={() => downloadAudio(audio)} className="w-6 h-6 flex items-center justify-center rounded bg-indigo-900/40 text-indigo-400 hover:text-indigo-300 hover:bg-indigo-900/60 transition-colors" title="Скачать"><Download className="w-3 h-3"/></button>
+                                <button onClick={() => deleteGeneratedVoiceAudio(audio.id)} className="w-6 h-6 flex items-center justify-center rounded bg-red-900/30 text-red-500 hover:bg-red-900/50 transition-colors" title="Удалить"><Trash2 className="w-3 h-3"/></button>
+                                {!isSelected && <button onClick={() => selectGeneratedVoiceAudio(audio.id)} className="text-[10px] uppercase font-bold text-red-400 hover:text-red-300 ml-2">Выбрать вариант</button>}
+                                {isSelected && <span className="text-[10px] uppercase font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded flex items-center gap-1 ml-2"><Check className="w-3 h-3"/> Active</span>}
                               </div>
                             </div>
                           </div>
