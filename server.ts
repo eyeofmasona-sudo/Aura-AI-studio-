@@ -220,7 +220,7 @@ CRITICAL RULES:
       const { text, voiceName = "Kore", speakingRate = 1.0 } = req.body;
       if (!text) return res.status(400).json({ error: "text is required" });
 
-      const ttsModel = process.env.GOOGLE_AI_TTS_MODEL || "gemini-2.5-flash-preview-tts";
+      const ttsModel = process.env.GOOGLE_AI_TTS_MODEL || "gemini-3.1-flash-tts";
       const response = await ai.models.generateContent({
         model: ttsModel,
         contents: [{ role: "user", parts: [{ text }] }],
