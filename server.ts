@@ -152,7 +152,7 @@ CRITICAL RULES:
       const params: any = {
         model: "veo-3.1-lite-generate-preview",
         prompt,
-        config: { numberOfVideos, durationSeconds, generateAudio: false },
+        config: { numberOfVideos, durationSeconds },
       };
       if (firstFrameBase64) {
         params.image = { imageBytes: firstFrameBase64, mimeType: firstFrameMime };
