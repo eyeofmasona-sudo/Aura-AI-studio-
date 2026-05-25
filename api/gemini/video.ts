@@ -37,6 +37,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     // Add first frame if provided
     if (firstFrameImage) {
+      // If firstFrameImage is a URL string, fetch and convert to base64
       let imageData = firstFrameImage;
       if (typeof firstFrameImage === 'string' && firstFrameImage.startsWith('http')) {
         try {
@@ -44,16 +45,18 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
           const buffer = await imgResponse.arrayBuffer();
           imageData = Buffer.from(buffer).toString('base64');
         } catch (e) {
-          console.warn('Failed to fetch image, skipping:', e);
+          console.warn('Failed to fetch image:', e);
           imageData = null;
         }
       }
 
-      if (imageData && typeof imageData === 'string') {
-        generateParams.image = {
-          imageBytes: imageData,
-          mimeType: 'image/jpeg',
-        };
+      if (imageData) {
+        parts.push({
+          inline_data: {
+            mime_type: 'image/jpeg',
+            data: imageData
+          }
+        });
       }
     }
 
