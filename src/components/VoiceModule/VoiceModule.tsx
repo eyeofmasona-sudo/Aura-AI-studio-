@@ -40,6 +40,7 @@ export interface VoiceModuleState {
   customSpeed: string;
   selectedPitch: string | null;
   selectedEmotion: string | null;
+  selectedVoiceName: string | null;
   selectedTtsModel: string | null;
   ssmlText: string;
   ssmlErrors: string[];
@@ -71,6 +72,12 @@ const TTS_MODELS = [
   { id: "elevenlabs", label: "ElevenLabs (Высокий реализм)" },
   { id: "openai", label: "OpenAI TTS (Выразительный)" }
 ];
+const GEMINI_VOICES = [
+  "aoede", "charon", "fenrir", "kore", "puck", "zephyr", "achernar", "algenib", 
+  "alnilam", "autonoe", "callirrhoe", "despina", "enceladus", "erinome", "gacrux", 
+  "iapetus", "laomedeia", "leda", "orus", "pulcherrima", "rasalgethi", "sadachbia", 
+  "sadaltager", "schedar", "sulafat", "umbriel", "vindemiatrix", "zubenelgenubi"
+];
 
 export function VoiceModule({ onApprove }: VoiceModuleProps) {
   // State initialization
@@ -86,6 +93,7 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
       customSpeed: "",
       selectedPitch: "низкая",
       selectedEmotion: "напряжение",
+      selectedVoiceName: "fenrir",
       selectedTtsModel: "gemini",
       ssmlText: "",
       ssmlErrors: [],
@@ -260,6 +268,7 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
   const updateCustomSpeed = (val: string) => updateState({ customSpeed: val });
   const selectPitch = (val: string) => updateState({ selectedPitch: val });
   const selectEmotion = (val: string) => updateState({ selectedEmotion: val });
+  const selectVoiceName = (val: string) => updateState({ selectedVoiceName: val });
   const selectTtsModel = (val: string) => updateState({ selectedTtsModel: val });
 
   const generateVoiceDirection = () => {
@@ -347,22 +356,12 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
         textToSynthesize = `[Режиссерская ремарка: Тон - ${state.selectedTone}, Эмоция - ${state.selectedEmotion}, Темп - ${state.selectedSpeed}, Высота голоса - ${state.selectedPitch}]\n\n${state.voiceText}`;
       }
 
-      const voiceNameMap: Record<string, string> = {
-        'мужской': 'fenrir',
-        'женский': 'aoede',
-        'нейтральный': 'zephyr',
-        'детский': 'puck',
-        'пожилой': 'charon',
-        'персонажный': 'kore',
-        'дикторский': 'fenrir'
-      };
-
       const response = await fetch('/api/gemini/tts', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           text: textToSynthesize,
-          voiceName: voiceNameMap[state.selectedVoiceType || 'мужской']
+          voiceName: state.selectedVoiceName || 'fenrir'
         })
       });
 
@@ -383,7 +382,7 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
       const freshAudio: GeneratedVoiceAudioItem = {
         id: `tts-${Date.now()}`,
         textRef: state.voiceLines.length > 0 ? state.voiceLines[0].text.substring(0, 30) + "..." : "Полный скрипт",
-        voiceModel: `Gemini TTS - ${voiceNameMap[state.selectedVoiceType || 'мужской']}`,
+        voiceModel: `Gemini TTS - ${state.selectedVoiceName || 'fenrir'}`,
         url: audioUrl,
         duration: "0:25",
         createdAt: new Date().toLocaleTimeString()
@@ -670,12 +669,18 @@ export function VoiceModule({ onApprove }: VoiceModuleProps) {
                   <button onClick={generateVoiceDirection} className="px-3 py-1.5 bg-slate-900 border border-slate-700 text-xs text-slate-300 rounded font-bold hover:text-white">Создать Voice Direction</button>
                 </div>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                   <div className="flex flex-col gap-2">
                     <label className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">Тип голоса</label>
                     <select value={state.selectedVoiceType || ""} onChange={e => selectVoiceType(e.target.value)} className="bg-black/60 border border-slate-700 rounded-lg p-2.5 text-xs text-white outline-none focus:border-red-500">
                       <option value="" disabled>Выберите тип</option>
                       {VOICE_TYPES.map(vt => <option key={vt} value={vt}>{vt}</option>)}
+                    </select>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[11px] font-extrabold uppercase tracking-widest text-slate-400">Голос (Gemini)</label>
+                    <select value={state.selectedVoiceName || "fenrir"} onChange={e => selectVoiceName(e.target.value)} className="bg-black/60 border border-slate-700 rounded-lg p-2.5 text-xs text-white outline-none focus:border-red-500">
+                      {GEMINI_VOICES.map(vt => <option key={vt} value={vt}>{vt}</option>)}
                     </select>
                   </div>
                   <div className="flex flex-col gap-2">
