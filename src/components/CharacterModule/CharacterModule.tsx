@@ -12,7 +12,7 @@ export interface CharacterProfile {
   characterName: string;
   characterRole: string;
   characterAge: string;
-  gender?: 'male' | 'female' | 'other';
+  gender?: 'male' | 'female' | 'other' | 'animal';
   characterDescription: string;
   appearanceDescription: string;
   outfitDescription: string;
@@ -174,9 +174,10 @@ export function CharacterModule({ onApprove, isApproved }: { onApprove: () => vo
     return Math.abs(hash);
   };
 
-  const getGenderForCharacter = (char: CharacterProfile): 'male' | 'female' => {
+  const getGenderForCharacter = (char: CharacterProfile): 'male' | 'female' | 'animal' => {
     if (char.gender === 'male') return 'male';
     if (char.gender === 'female') return 'female';
+    if (char.gender === 'animal') return 'animal';
     
     // Fallback adaptive keyword-based detection
     const textToScan = `${char.characterName} ${char.characterRole} ${char.characterDescription} ${char.appearanceDescription}`.toLowerCase();
@@ -251,14 +252,21 @@ export function CharacterModule({ onApprove, isApproved }: { onApprove: () => vo
     const selectedExpression = char.selectedExpression || "Нейтральная";
 
     // Build a clean, precise cinematic rendering prompt for Stable Diffusion / Midjourney
-    const genderWord = getGenderForCharacter(char) === 'female' ? "woman" : "man";
+    const genderType = getGenderForCharacter(char);
+    const ageStr = char.characterAge ? `${char.characterAge} year old ` : "";
+    let genderWord = "person";
+    if (genderType === 'female') genderWord = `${ageStr}woman`;
+    else if (genderType === 'male') genderWord = `${ageStr}man`;
+    else if (genderType === 'animal') genderWord = "animal/creature";
+    else genderWord = `${ageStr}person`;
+
     let styleTag = selectedImageStyle;
     if (styleTag === "Реализм") styleTag = "highly detailed photorealistic, realism standard";
     
     const countrySuffix = getCountryAppearanceSuffix(char);
 
     const parts = [
-      `Cinematic ${selectedPortraitType.toLowerCase()} of ${char.characterName || "Unnamed"}, a ${char.characterAge || "30"} year old ${genderWord}`,
+      `Cinematic ${selectedPortraitType.toLowerCase()} of ${char.characterName || "Unnamed"}, a ${genderWord}`,
       countrySuffix ? `ethnic look: ${countrySuffix}` : "",
       char.characterRole ? `role: ${char.characterRole}` : "",
       char.appearanceDescription ? char.appearanceDescription.trim() : "",
@@ -675,6 +683,89 @@ CRITICAL RULES:
             {activeChar && (
               <div className="flex flex-col gap-6 animate-fade-in" key={activeChar.id}>
                 
+                {/* 0. Image Upload for generation */}
+                <div className="flex flex-col gap-2 p-3 bg-[#00F0FF]/5 border border-[#00F0FF]/20 rounded-lg">
+                  <span className="text-xs font-bold text-[#00F0FF]">Сгенерировать персонажа по изображению (Опционально)</span>
+                  <div className="flex items-center gap-3">
+                    <label className="cursor-pointer px-4 py-2 bg-slate-800 hover:bg-slate-700 border border-slate-600 rounded text-xs font-bold uppercase transition-all flex items-center gap-2 text-slate-200">
+                      <ImageIcon className="w-4 h-4" /> Загрузить референс
+                      <input 
+                        type="file" 
+                        accept="image/*" 
+                        className="hidden" 
+                        onChange={async (e) => {
+                          const file = e.target.files?.[0];
+                          if (!file) return;
+                          
+                          if (file.size > 4.5 * 1024 * 1024) {
+                            alert("Файл слишком большой. Выберите изображение до 4.5 МБ.");
+                            return;
+                          }
+
+                          setIsAiLoading(prev => ({ ...prev, [activeChar.id + "_analyze_image"]: true }));
+                          try {
+                            const reader = new FileReader();
+                            reader.onload = async (re) => {
+                              try {
+                                const result = re.target?.result as string;
+                                const base64Data = result.split(',')[1];
+                                
+                                const response = await fetch('/api/gemini/analyze-image', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    imageData: base64Data,
+                                    mimeType: file.type || 'image/jpeg'
+                                  })
+                                });
+                                
+                                if (!response.ok) throw new Error("Failed to analyze image");
+                                const data = await response.json();
+                                
+                                let parsed: any = {};
+                                try {
+                                  let cleaned = data.result.trim();
+                                  if (cleaned.startsWith("\`\`\`")) {
+                                    cleaned = cleaned.replace(/^\`\`\`json/i, "").replace(/^\`\`\`/, "").replace(/\`\`\`$/, "").trim();
+                                  }
+                                  parsed = JSON.parse(cleaned);
+                                } catch (e) {
+                                  parsed = { appearance: data.result };
+                                }
+                                
+                                setCharacters(prev => prev.map(c => {
+                                  if (c.id === activeChar.id) {
+                                    return {
+                                      ...c,
+                                      gender: parsed.gender || c.gender,
+                                      characterAge: parsed.age || c.characterAge,
+                                      appearanceDescription: parsed.appearance || c.appearanceDescription,
+                                      outfitDescription: parsed.outfit || c.outfitDescription,
+                                      emotionDescription: parsed.emotion || c.emotionDescription
+                                    };
+                                  }
+                                  return c;
+                                }));
+                                alert("Профиль персонажа успешно заполнен на основе изображения!");
+                              } catch(err: any) {
+                                alert("Ошибка: " + err.message);
+                              } finally {
+                                setIsAiLoading(prev => ({ ...prev, [activeChar.id + "_analyze_image"]: false }));
+                              }
+                            };
+                            reader.readAsDataURL(file);
+                          } catch (err: any) {
+                            alert("Ошибка чтения файла: " + err.message);
+                            setIsAiLoading(prev => ({ ...prev, [activeChar.id + "_analyze_image"]: false }));
+                          }
+                        }}
+                      />
+                    </label>
+                    {isAiLoading[activeChar.id + "_analyze_image"] && <Loader2 className="w-4 h-4 animate-spin text-[#00F0FF]" />}
+                    <span className="text-[10px] text-slate-400">Загрузите фото, арт или концепт, и ИИ опишет его для генератора.</span>
+                  </div>
+                </div>
+
                 {/* 1. fields */}
                 <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
                   <div className="flex flex-col gap-1.5">
@@ -719,6 +810,7 @@ CRITICAL RULES:
                     >
                       <option value="female" className="bg-slate-900 text-white">Женский (Female)</option>
                       <option value="male" className="bg-slate-900 text-white">Мужской (Male)</option>
+                      <option value="animal" className="bg-slate-900 text-white">Животное / Существо</option>
                       <option value="other" className="bg-slate-900 text-white">Другой / Универсал</option>
                     </select>
                   </div>
