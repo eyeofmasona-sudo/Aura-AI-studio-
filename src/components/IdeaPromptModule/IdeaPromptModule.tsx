@@ -22,14 +22,22 @@ interface IdeaState {
   finalPrompt: string;
   aiSuggestions: any[];
   validationErrors: Record<string, string>;
+  magicLanguage: string;
+  magicDuration: number;
+  magicGenerateCharacters: boolean;
+  isMagicRunning: boolean;
+  magicProgress: number;
+  magicStatusText: string;
 }
 
 export function IdeaPromptModule({ 
   onApprove,
-  onSendToCharacters
+  onSendToCharacters,
+  onMagicComplete
 }: { 
   onApprove: () => void;
   onSendToCharacters?: (payload: any) => void;
+  onMagicComplete?: () => void;
   key?: React.Key;
 }) {
   const [state, setState] = useState<IdeaState>({
@@ -45,7 +53,13 @@ export function IdeaPromptModule({
     generatedMoodboard: [],
     finalPrompt: "",
     aiSuggestions: [],
-    validationErrors: {}
+    validationErrors: {},
+    magicLanguage: "Русский",
+    magicDuration: 4, // in 8-second blocks. 4 = 32s
+    magicGenerateCharacters: true,
+    isMagicRunning: false,
+    magicProgress: 0,
+    magicStatusText: ""
   });
 
   // Restore state from localStorage on mount
@@ -351,7 +365,174 @@ export function IdeaPromptModule({
     alert(`Идея успешно сохранена в проект "${pName}"! Вы найдете сгенерированный Markdown файл (1_Идея_и_Солид.md) в левом сайдбаре проекта.`);
   };
 
+  // --- MAGIC PIPELINE ---
+  const runMagicPipeline = async () => {
+    setState(s => ({ ...s, isMagicRunning: true, magicProgress: 5, magicStatusText: "Инициализация конвейера..." }));
+    
+    try {
+      const context = [
+        state.ideaText,
+        state.selectedGenres.join(", "),
+        state.selectedMoods.join(", "),
+        state.selectedEra
+      ].filter(Boolean).join(" | ");
+
+      if (!context && !state.uploadedAudioFile) throw new Error("Введите идею для начала!");
+
+      const isArmenian = state.magicLanguage === "Հայերեն";
+      const languageInstruction = isArmenian 
+        ? "ОТВЕЧАЙ СТРОГО НА АРМЯНСКОМ ЯЗЫКЕ (Հայերեն), но поля 'videoPrompt' и 'motionPrompt' всегда пиши на английском." 
+        : `Отвечай на языке: ${state.magicLanguage}. Поля промптов для видео - строго на английском.`;
+
+      // 1. Characters
+      let characterContext = "";
+      if (state.magicGenerateCharacters) {
+        setState(s => ({ ...s, magicProgress: 15, magicStatusText: "Генерация персонажей..." }));
+        
+        const charRes = await fetch('/api/gemini/action', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            actionName: "Generate Characters Magic",
+            inputs: [
+              `Идея: ${context}`,
+              languageInstruction,
+              `Верни ТОЛЬКО валидный JSON массив объектов (от 1 до 3). Формат: [{"id": "1", "name": "имя", "role": "роль", "archetype": "архетип", "visualDescription": "описание", "psychology": "психология", "videoPrompt": "English prompt", "validationErrors": {}}]`
+            ],
+            specTitle: "Магия"
+          })
+        });
+        
+        if (!charRes.ok) throw new Error("Ошибка генерации персонажей");
+        const charData = await charRes.json();
+        let characters = [];
+        try {
+           const cleaned = charData.result.replace(/```json/g, '').replace(/```/g, '').trim();
+           characters = JSON.parse(cleaned);
+           localStorage.setItem('aura_character_state', JSON.stringify({ characters }));
+           characterContext = "Персонажи: " + characters.map((c:any) => `${c.name} (${c.role})`).join(", ");
+        } catch(e) { console.warn("Failed to parse characters"); }
+      }
+
+      // 2. Scenario
+      setState(s => ({ ...s, magicProgress: 35, magicStatusText: "Написание сценария..." }));
+      const sceneRes = await fetch('/api/gemini/action', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          actionName: "Generate Scenes Magic",
+          inputs: [
+            `Идея: ${context}`,
+            characterContext,
+            `Создай ровно ${state.magicDuration} сцен.`,
+            languageInstruction,
+            `Верни ТОЛЬКО валидный JSON массив объектов. Формат: [{"id": "1", "title": "название", "description": "описание", "location": "локация", "characters": ["имя"], "videoPrompt": "English cinematic prompt for Veo", "duration": "8 сек", "cameraMovement": "static"}]`
+          ],
+          specTitle: "Магия"
+        })
+      });
+      
+      if (!sceneRes.ok) throw new Error("Ошибка генерации сценария");
+      const sceneData = await sceneRes.json();
+      let scenes = [];
+      try {
+         const cleaned = sceneData.result.replace(/```json/g, '').replace(/```/g, '').trim();
+         scenes = JSON.parse(cleaned);
+         localStorage.setItem('aura_scenario_state', JSON.stringify({ scenes }));
+      } catch(e) { throw new Error("Сценарий не в формате JSON"); }
+
+      // Map Blocks
+      let videoBlocks: any[] = scenes.map((sc: any, idx: number) => ({
+        id: `block-magic-${Date.now()}-${idx}`,
+        chapterId: "chap-magic",
+        chapterTitle: "Магия",
+        sceneId: sc.id || `sc-magic-${idx}`,
+        sceneNumber: idx + 1,
+        sceneTitle: sc.title || `Сцена ${idx + 1}`,
+        sceneDescription: sc.description || "",
+        characters: typeof sc.characters === 'string' ? sc.characters.split(',') : (sc.characters || []),
+        location: sc.location || "",
+        mood: "",
+        visualStyleHint: "",
+        continuityNotes: "",
+        firstFrameImage: null,
+        lastFrameImage: null,
+        scenePrompt: sc.videoPrompt || "",
+        motionPrompt: "",
+        negativePrompt: "",
+        cameraMovement: sc.cameraMovement || "static",
+        duration: "8 сек",
+        transitionToNextScene: "cut",
+        generationStatus: "idle",
+        generatedVideos: [],
+        selectedVideoId: null,
+        validationErrors: {}
+      }));
+
+      // 3. Videos
+      let timelineClips: any[] = [];
+      const totalScenes = videoBlocks.length;
+      
+      for (let i = 0; i < totalScenes; i++) {
+        setState(s => ({ ...s, magicProgress: 40 + (i / totalScenes) * 50, magicStatusText: `Генерация видео ${i + 1} из ${totalScenes}...` }));
+        const block = videoBlocks[i];
+        
+        try {
+          const vRes = await fetch('/api/gemini/video', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              prompt: block.scenePrompt,
+              duration: '8 seconds',
+              cameraMovement: block.cameraMovement
+            })
+          });
+          
+          if (vRes.ok) {
+             const vData = await vRes.json();
+             let videoUrl = null;
+             if (vData.candidates?.[0]?.content?.parts?.[0]?.file_data?.file_uri) {
+               videoUrl = vData.candidates[0].content.parts[0].file_data.file_uri;
+             } else if (vData.candidates?.[0]?.content?.parts?.[0]?.inline_data?.data) {
+               videoUrl = "data:video/mp4;base64," + vData.candidates[0].content.parts[0].inline_data.data;
+             }
+             
+             if (videoUrl) {
+                const vidId = `vid-magic-${Date.now()}`;
+                block.generationStatus = "success";
+                block.generatedVideos = [{ id: vidId, url: videoUrl, previewUrl: videoUrl, timestamp: new Date().toLocaleTimeString(), motionType: block.cameraMovement }];
+                block.selectedVideoId = vidId;
+                
+                timelineClips.push({
+                  id: `clip-magic-${block.id}`,
+                  sceneId: block.sceneId,
+                  sceneTitle: block.sceneTitle,
+                  videoUrl: videoUrl,
+                  duration: "8 сек",
+                  transition: "cut",
+                  promptMatched: block.scenePrompt
+                });
+             }
+          }
+        } catch(e) { console.warn(`Видео ${i + 1} ошибка:`, e); }
+      }
+      
+      localStorage.setItem('video_generator_blocks', JSON.stringify(videoBlocks));
+      localStorage.setItem('video_generator_clips', JSON.stringify(timelineClips));
+
+      setState(s => ({ ...s, magicProgress: 100, magicStatusText: "Готово! Переход в Видеоредактор..." }));
+      
+      setTimeout(() => {
+        setState(s => ({ ...s, isMagicRunning: false }));
+        if (onMagicComplete) onMagicComplete();
+      }, 1500);
+
+    } catch(err: any) {
+      console.error(err);
+      alert("Ошибка Магии: " + err.message);
+      setState(s => ({ ...s, isMagicRunning: false }));
+    }
+  };
+
   return (
+
     <div className="w-full min-h-[100vh] flex flex-col">
       <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_320px] xl:grid-cols-[minmax(0,1fr)_320px] gap-6 w-full max-w-7xl mx-auto items-start">
         {/* ЛЕВАЯ ЧАСТЬ: Единая Рабочая Область */}
@@ -369,6 +550,98 @@ export function IdeaPromptModule({
               <p className="text-sm text-slate-400">Формирование основы истории, настройка визуального стиля и сборка промпта</p>
             </div>
           </div>
+
+          {/* MAGIC MODE OVERLAY */}
+          <AnimatePresence>
+            {state.isMagicRunning && (
+              <motion.div 
+                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                className="fixed inset-0 z-[200] bg-black/80 backdrop-blur-md flex items-center justify-center p-4"
+              >
+                <div className="bg-[#121824] border border-[#B026FF]/50 p-8 rounded-2xl max-w-md w-full shadow-[0_0_50px_rgba(176,38,255,0.2)] flex flex-col items-center text-center gap-6 relative overflow-hidden">
+                   <div className="absolute top-0 left-0 h-1 bg-gradient-to-r from-[#B026FF] to-[#00F0FF] transition-all duration-300" style={{width: `${state.magicProgress}%`}}></div>
+                   
+                   <div className="w-20 h-20 rounded-full bg-[#B026FF]/20 flex items-center justify-center border-2 border-[#B026FF]/50 animate-pulse">
+                     <Sparkles className="w-10 h-10 text-[#B026FF] animate-spin-slow" />
+                   </div>
+                   
+                   <div className="flex flex-col gap-2 w-full">
+                     <h2 className="text-2xl font-bold text-white">Режим «Магия»</h2>
+                     <p className="text-[#00F0FF] font-medium tracking-wide uppercase text-sm animate-pulse">{state.magicStatusText}</p>
+                   </div>
+                   
+                   <div className="w-full h-2 bg-slate-800 rounded-full overflow-hidden mt-2">
+                     <div className="h-full bg-gradient-to-r from-[#B026FF] to-[#00F0FF] transition-all duration-300" style={{width: `${state.magicProgress}%`}}></div>
+                   </div>
+                   <p className="text-xs text-slate-500">Пожалуйста, подождите. ИИ-Директор собирает ваш фильм...</p>
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* MAGIC MODE UI */}
+          <div className="flex flex-col gap-4">
+            <h2 className="text-sm font-bold text-[#B026FF] uppercase tracking-widest flex items-center gap-2">
+              <span className="w-1.5 h-1.5 rounded-full bg-[#B026FF] animate-pulse"></span> 0. Авто-Генератор (Магия)
+            </h2>
+            <div className="bg-[#B026FF]/5 border border-[#B026FF]/30 p-5 rounded-xl shadow-[0_0_20px_rgba(176,38,255,0.05)] flex flex-col gap-4 relative overflow-hidden">
+               <div className="absolute top-0 left-0 w-full h-[1px] bg-gradient-to-r from-transparent via-[#B026FF] to-transparent opacity-50"></div>
+               
+               <p className="text-xs text-slate-400 leading-relaxed">
+                 Опишите идею ниже, настройте эти параметры и нажмите кнопку. Система сама сгенерирует персонажей, сценарий и видео-ряд!
+               </p>
+               
+               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                 <div className="flex flex-col gap-1.5">
+                   <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Язык контента</span>
+                   <select 
+                     value={state.magicLanguage} 
+                     onChange={e => setState(s => ({ ...s, magicLanguage: e.target.value }))}
+                     className="bg-black/60 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-[#B026FF]/50"
+                   >
+                     <option value="Русский">Русский (Ru)</option>
+                     <option value="English">English (En)</option>
+                     <option value="Հայերեն">Հայերեն (Am)</option>
+                   </select>
+                 </div>
+                 
+                 <div className="flex flex-col gap-1.5">
+                   <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider">Длительность (в сценах)</span>
+                   <select 
+                     value={state.magicDuration} 
+                     onChange={e => setState(s => ({ ...s, magicDuration: Number(e.target.value) }))}
+                     className="bg-black/60 border border-slate-700 rounded-lg p-2 text-xs text-slate-200 outline-none focus:border-[#B026FF]/50"
+                   >
+                     <option value={2}>2 Сцены (16 сек)</option>
+                     <option value={4}>4 Сцены (32 сек)</option>
+                     <option value={6}>6 Сцен (48 сек)</option>
+                     <option value={8}>8 Сцен (64 сек)</option>
+                   </select>
+                 </div>
+                 
+                 <div className="flex flex-col gap-1.5 justify-end">
+                   <label className="flex items-center gap-2 cursor-pointer group bg-black/60 border border-slate-700 rounded-lg p-2">
+                     <input 
+                       type="checkbox" 
+                       checked={state.magicGenerateCharacters} 
+                       onChange={e => setState(s => ({ ...s, magicGenerateCharacters: e.target.checked }))}
+                       className="accent-[#B026FF] w-4 h-4"
+                     />
+                     <span className="text-[11px] text-slate-300 font-medium group-hover:text-white transition-colors">Создать персонажей</span>
+                   </label>
+                 </div>
+               </div>
+               
+               <button 
+                 onClick={runMagicPipeline}
+                 disabled={(!state.ideaText && !state.uploadedAudioFile) || state.isMagicRunning}
+                 className="w-full flex justify-center items-center gap-2 mt-2 py-3 rounded-xl bg-gradient-to-r from-[#B026FF] to-[#00F0FF] text-white font-bold text-sm shadow-[0_0_20px_rgba(176,38,255,0.4)] hover:shadow-[0_0_30px_rgba(176,38,255,0.6)] hover:scale-[1.01] transition-all disabled:opacity-50 disabled:scale-100 disabled:cursor-not-allowed"
+               >
+                 <Sparkles className="w-4 h-4" /> Запустить Магический Конвейер!
+               </button>
+            </div>
+          </div>
+
 
           {/* 1. ИСТОЧНИКИ ИДЕИ */}
           <div className="flex flex-col gap-4">

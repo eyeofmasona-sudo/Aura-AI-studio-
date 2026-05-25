@@ -199,6 +199,12 @@ export default function App() {
                     setUnlockedSteps(prev => [...prev, 'step-2']);
                   }
                 }}
+                onMagicComplete={() => {
+                  setUnlockedSteps(specData.map(s => s.id));
+                  setApprovedSteps(specData.map(s => s.id));
+                  setActiveStepId('step-9');
+                  setToast({ message: "Режим Магия завершен! Фильм собран в видеоредакторе.", type: "success" });
+                }}
               />
             ) : activeStepId === 'step-2' ? (
               <CharacterModule 
