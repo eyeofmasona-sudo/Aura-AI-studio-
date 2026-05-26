@@ -148,14 +148,23 @@ CRITICAL RULES:
         }
       }
 
-      const userPrompt = `Действие: ${actionName}\n\nКонтекст проекта:\n${(inputs as string[]).map((inp, i) => `${i + 1}. ${inp}`).join('\n')}`;
-
+      const userPromptText = `Действие: ${actionName}\n\nКонтекст проекта:\n${(inputs as string[]).map((inp, i) => `${i + 1}. ${inp}`).join('\n')}`;
+      let contentsParts: any[] = [{ text: userPromptText }];
+      
+      const { images } = req.body;
+      if (images && Array.isArray(images)) {
+        for (const img of images) {
+          if (img.data && img.mimeType) {
+             contentsParts.push({ inlineData: { data: img.data, mimeType: img.mimeType } });
+          }
+        }
+      }
 
       // Standard Text GenerateContent
       const response = await ai.models.generateContent({
         model: targetModel,
         config: { systemInstruction },
-        contents: userPrompt,
+        contents: contentsParts,
       });
 
       res.json({ result: response.text });

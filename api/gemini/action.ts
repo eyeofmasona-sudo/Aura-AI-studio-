@@ -32,13 +32,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 Используй markdown-форматирование, кинематографическую терминологию.`;
     }
 
-    const userPrompt = `Действие: ${actionName}\n\nКонтекст проекта:\n${(inputs as string[]).map((inp, i) => `${i + 1}. ${inp}`).join('\n')}`;
+    const userPromptText = `Действие: ${actionName}\n\nКонтекст проекта:\n${(inputs as string[]).map((inp, i) => `${i + 1}. ${inp}`).join('\n')}`;
+    
+    let contentsParts: any[] = [{ text: userPromptText }];
+    
+    const { images } = req.body;
+    if (images && Array.isArray(images)) {
+      for (const img of images) {
+        if (img.data && img.mimeType) {
+           contentsParts.push({
+             inlineData: {
+               data: img.data,
+               mimeType: img.mimeType
+             }
+           });
+        }
+      }
+    }
 
     const ai = new GoogleGenAI({ apiKey });
     const response = await ai.models.generateContent({
       model: targetModel,
       config: { systemInstruction },
-      contents: userPrompt,
+      contents: contentsParts,
     });
 
     return res.json({ result: response.text });

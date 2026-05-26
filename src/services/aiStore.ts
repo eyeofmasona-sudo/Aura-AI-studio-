@@ -549,6 +549,7 @@ export class AiStore {
     actionName: string;
     systemInstruction?: string;
     bypassCache?: boolean;
+    images?: { data: string, mimeType: string }[];
     onConfirmedStart?: () => void;
   }): Promise<string> {
     const registryItem = aiFunctionRegistry.find(
@@ -586,7 +587,7 @@ export class AiStore {
     }
 
     const cacheKey = this.generateInputHash(params.module, params.functionName, info.modelName, params.inputs);
-    if (!params.bypassCache && this.cache[cacheKey]) {
+    if (!params.bypassCache && this.cache[cacheKey] && (!params.images || params.images.length === 0)) {
       // Return cached
       const cachedResult = this.cache[cacheKey];
       
@@ -620,6 +621,7 @@ export class AiStore {
         inputs: params.inputs,
         modelName: info.modelName,
         systemInstruction: params.systemInstruction,
+        images: params.images,
       };
 
       const res = await fetch("/api/gemini/action", {

@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Upload, FileAudio, X, Sparkles, Wand2, Copy, 
   Save, Forward, Loader2, Film, MessageSquare, Plus, AlignLeft, Layout, Edit3,
-  RefreshCcw, Terminal
+  RefreshCcw, Terminal, ImagePlus, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { AiStore } from '../../services/aiStore';
@@ -25,10 +25,11 @@ interface IdeaState {
   magicLanguage: string;
   magicDuration: number;
   magicClipDuration: string;
-  magicGenerateCharacters: boolean;
+  magicCharacterImages: { data: string, mimeType: string, url: string }[];
   isMagicRunning: boolean;
   magicProgress: number;
   magicStatusText: string;
+  showAdvancedTools: boolean;
 }
 
 export function IdeaPromptModule({ 
@@ -59,9 +60,11 @@ export function IdeaPromptModule({
     magicDuration: 30, // in seconds (Total duration)
     magicClipDuration: "5", // 5 seconds per clip default
     magicGenerateCharacters: true,
+    magicCharacterImages: [],
     isMagicRunning: false,
     magicProgress: 0,
-    magicStatusText: ""
+    magicStatusText: "",
+    showAdvancedTools: false
   });
 
   // Restore state from localStorage on mount
@@ -414,19 +417,25 @@ export function IdeaPromptModule({
       if (state.magicGenerateCharacters) {
         setState(s => ({ ...s, magicProgress: 15, magicStatusText: "Генерация персонажей..." }));
         
-        const charRes = await fetch('/api/gemini/action', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            actionName: "Generate Characters Magic",
-            inputs: [
-              `Идея: ${context}`,
-              languageInstruction,
-              `СТРОГИЕ ПРАВИЛА: Категорически запрещено изменять суть оригинальной идеи! Не меняй животных на людей. Персонажами могут быть животные.`,
-              `Верни ТОЛЬКО валидный JSON массив объектов (от 1 до 3). Формат: [{"id": "1", "name": "имя", "role": "роль", "archetype": "архетип", "visualDescription": "описание", "psychology": "психология", "videoPrompt": "English prompt", "validationErrors": {}}]`
-            ],
-            specTitle: "Магия"
-          })
-        });
+          const imageInputText = state.magicCharacterImages.length > 0 
+            ? "ВНИМАНИЕ: Пользователь прикрепил изображения! Строго опиши внешность персонажей, опираясь на эти изображения." 
+            : "";
+          
+          const charRes = await fetch('/api/gemini/action', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              actionName: "Generate Characters Magic",
+              inputs: [
+                `Идея: ${context}`,
+                languageInstruction,
+                imageInputText,
+                `СТРОГИЕ ПРАВИЛА: Категорически запрещено изменять суть оригинальной идеи! Не меняй животных на людей. Персонажами могут быть животные.`,
+                `Верни ТОЛЬКО валидный JSON массив объектов (от 1 до 3). Формат: [{"id": "1", "name": "имя", "role": "роль", "archetype": "архетип", "visualDescription": "описание", "psychology": "психология", "videoPrompt": "English prompt", "validationErrors": {}}]`
+              ].filter(Boolean),
+              specTitle: "Магия",
+              images: state.magicCharacterImages.length > 0 ? state.magicCharacterImages.map(img => ({ data: img.data, mimeType: img.mimeType })) : undefined
+            })
+          });
         
         if (!charRes.ok) throw new Error("Ошибка генерации персонажей");
         const charData = await charRes.json();
@@ -698,6 +707,54 @@ export function IdeaPromptModule({
                    </label>
                  </div>
                </div>
+
+               {/* MAGIC IMAGE UPLOAD */}
+               {state.magicGenerateCharacters && (
+                 <div className="flex flex-col gap-2 mt-2">
+                   <span className="text-[10px] uppercase font-bold text-slate-500 tracking-wider flex items-center gap-1">
+                     <ImagePlus className="w-3 h-3" /> Свои персонажи (Опционально)
+                   </span>
+                   <div className="flex flex-wrap gap-2 items-center">
+                     {state.magicCharacterImages.map((img, idx) => (
+                       <div key={idx} className="relative group w-16 h-16 rounded-md overflow-hidden border border-slate-700">
+                         <img src={img.url} alt="Char" className="w-full h-full object-cover" />
+                         <button 
+                           onClick={() => setState(s => ({ ...s, magicCharacterImages: s.magicCharacterImages.filter((_, i) => i !== idx) }))}
+                           className="absolute top-1 right-1 bg-red-500/80 p-0.5 rounded text-white opacity-0 group-hover:opacity-100 transition-opacity"
+                         >
+                           <X className="w-3 h-3" />
+                         </button>
+                       </div>
+                     ))}
+                     
+                     {state.magicCharacterImages.length < 3 && (
+                       <label className="w-16 h-16 rounded-md border border-dashed border-[#B026FF]/50 bg-[#B026FF]/10 flex flex-col items-center justify-center cursor-pointer hover:bg-[#B026FF]/20 hover:border-[#B026FF] transition-all">
+                         <input 
+                           type="file" 
+                           accept="image/jpeg,image/png,image/webp" 
+                           className="hidden" 
+                           onChange={(e) => {
+                             const file = e.target.files?.[0];
+                             if (!file) return;
+                             const reader = new FileReader();
+                             reader.onload = (event) => {
+                               const base64str = (event.target?.result as string).split(',')[1];
+                               setState(s => ({ 
+                                 ...s, 
+                                 magicCharacterImages: [...s.magicCharacterImages, { data: base64str, mimeType: file.type, url: URL.createObjectURL(file) }] 
+                               }));
+                             };
+                             reader.readAsDataURL(file);
+                             e.target.value = '';
+                           }}
+                         />
+                         <Plus className="w-5 h-5 text-[#B026FF]" />
+                         <span className="text-[8px] text-[#B026FF] mt-1 font-semibold uppercase">Добавить</span>
+                       </label>
+                     )}
+                   </div>
+                 </div>
+               )}
                
                <button 
                  onClick={runMagicPipeline}
@@ -710,7 +767,22 @@ export function IdeaPromptModule({
           </div>
 
 
-          {/* 1. ИСТОЧНИКИ ИДЕИ */}
+          {/* PRO MODE TOGGLE */}
+          <div className="w-full mt-4">
+            <button
+              onClick={() => setState(s => ({ ...s, showAdvancedTools: !s.showAdvancedTools }))}
+              className="w-full py-3 bg-black/40 border border-[#B026FF]/30 rounded-xl flex items-center justify-center gap-2 text-slate-300 hover:text-white transition-colors hover:bg-black/60 shadow-[0_0_15px_rgba(176,38,255,0.05)]"
+            >
+              {state.showAdvancedTools ? <ChevronUp className="w-5 h-5 text-[#B026FF]" /> : <ChevronDown className="w-5 h-5 text-[#B026FF]" />}
+              <span className="text-xs uppercase font-bold tracking-widest text-[#B026FF]">
+                Продвинутые инструменты (Ручная сборка)
+              </span>
+            </button>
+          </div>
+
+          {state.showAdvancedTools && (
+            <div className="flex flex-col gap-6 mt-2">
+              {/* 1. ИСТОЧНИКИ ИДЕИ */}
           <div className="flex flex-col gap-4">
             <h2 className="text-sm font-bold text-[#b026ff] uppercase tracking-widest flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[#b026ff]"></span> 1. Источники Идеи
@@ -945,6 +1017,8 @@ export function IdeaPromptModule({
             </div>
           </div>
           
+          </div>
+          )}
         </div>
       </div>
 
