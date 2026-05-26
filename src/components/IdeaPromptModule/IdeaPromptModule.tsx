@@ -767,22 +767,7 @@ export function IdeaPromptModule({
           </div>
 
 
-          {/* PRO MODE TOGGLE */}
-          <div className="w-full mt-4">
-            <button
-              onClick={() => setState(s => ({ ...s, showAdvancedTools: !s.showAdvancedTools }))}
-              className="w-full py-3 bg-black/40 border border-[#B026FF]/30 rounded-xl flex items-center justify-center gap-2 text-slate-300 hover:text-white transition-colors hover:bg-black/60 shadow-[0_0_15px_rgba(176,38,255,0.05)]"
-            >
-              {state.showAdvancedTools ? <ChevronUp className="w-5 h-5 text-[#B026FF]" /> : <ChevronDown className="w-5 h-5 text-[#B026FF]" />}
-              <span className="text-xs uppercase font-bold tracking-widest text-[#B026FF]">
-                Продвинутые инструменты (Ручная сборка)
-              </span>
-            </button>
-          </div>
-
-          {state.showAdvancedTools && (
-            <div className="flex flex-col gap-6 mt-2">
-              {/* 1. ИСТОЧНИКИ ИДЕИ */}
+          {/* 1. ИСТОЧНИКИ ИДЕИ */}
           <div className="flex flex-col gap-4">
             <h2 className="text-sm font-bold text-[#b026ff] uppercase tracking-widest flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-[#b026ff]"></span> 1. Источники Идеи
@@ -846,7 +831,22 @@ export function IdeaPromptModule({
             </div>
           </div>
 
-          {/* 2. ПАРАМЕТРЫ ИДЕИ */}
+          {/* PRO MODE TOGGLE */}
+          <div className="w-full mt-2">
+            <button
+              onClick={() => setState(s => ({ ...s, showAdvancedTools: !s.showAdvancedTools }))}
+              className="w-full py-3 bg-black/40 border border-[#B026FF]/30 rounded-xl flex items-center justify-center gap-2 text-slate-300 hover:text-white transition-colors hover:bg-black/60 shadow-[0_0_15px_rgba(176,38,255,0.05)]"
+            >
+              {state.showAdvancedTools ? <ChevronUp className="w-5 h-5 text-[#B026FF]" /> : <ChevronDown className="w-5 h-5 text-[#B026FF]" />}
+              <span className="text-xs uppercase font-bold tracking-widest text-[#B026FF]">
+                Продвинутые инструменты (Ручная сборка)
+              </span>
+            </button>
+          </div>
+
+          {state.showAdvancedTools && (
+            <div className="flex flex-col gap-6 mt-2">
+              {/* 2. ПАРАМЕТРЫ ИДЕИ */}
           <div className="flex flex-col gap-4">
             <h2 className="text-sm font-bold text-emerald-400 uppercase tracking-widest flex items-center gap-2">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span> 2. Параметры Идеи
